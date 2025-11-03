@@ -27,10 +27,16 @@ import kotlinx.coroutines.launch
 import kotlin.comparisons.compareByDescending
 import kotlin.comparisons.thenByDescending
 
+data class UserSearchResult(
+    val user: UserSummary,
+    val prompts: List<Prompt>
+)
+
 data class AuthUiState(
     val mode: AuthMode = AuthMode.SIGN_IN,
     val isProcessing: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val hasSeenLanding: Boolean = false
 )
 
 enum class AuthMode { SIGN_IN, REGISTER }
@@ -42,6 +48,8 @@ data class AppUiState(
     val prompts: List<Prompt> = emptyList(),
     val trending: List<Post> = emptyList(),
     val searchState: SearchState = SearchState(),
+    val watchedTags: Set<String> = emptySet(),
+    val watchedUsers: Set<Long> = emptySet(),
     val errorMessage: String? = null,
     val infoMessage: String? = null
 )
@@ -65,32 +73,55 @@ class AppViewModel(
             }.collect { (userId, snapshot) ->
                 val userProfiles = snapshot.users.associate { it.id to it.toProfile() }
                 val currentUser = userId?.let { userProfiles[it] }
-                val posts = buildPosts(snapshot, userProfiles, userId)
-                val prompts = buildPrompts(snapshot, userProfiles, userId)
-                val trending = posts
-                    .filter { it.isPublished } // Only published posts in trending
+                val allPosts = buildAllPosts(snapshot, userProfiles, userId)
+                val allPrompts = buildPrompts(snapshot, userProfiles, userId)
+
+                // Filter posts for feed based on watched content
+                val feedPosts = filterFeedPosts(allPosts, userId, _uiState.value.watchedTags, _uiState.value.watchedUsers)
+
+                val trending = allPosts
+                    .filter { it.isPublished }
                     .sortedWith(
                         compareByDescending<Post> { it.voteSummary.upvotes }
                             .thenByDescending { it.voteSummary.score }
                             .thenByDescending { it.createdAt }
                     ).take(TRENDING_LIMIT)
 
-                // Check if profile is incomplete using isProfileComplete flag
                 val requiresProfile = currentUser?.let { !it.isProfileComplete } == true
 
                 _uiState.update { state ->
-                    val updatedSearch = state.searchState.recompute(posts, prompts)
+                    val updatedSearch = state.searchState.recompute(allPosts, allPrompts, snapshot.users.map { it.toProfile() })
                     state.copy(
                         currentUser = currentUser,
                         requiresProfileSetup = requiresProfile,
-                        posts = posts,
-                        prompts = prompts,
+                        posts = feedPosts,
+                        prompts = allPrompts,
                         trending = trending,
                         searchState = updatedSearch
                     )
                 }
             }
         }
+    }
+
+    private fun filterFeedPosts(
+        allPosts: List<Post>,
+        userId: Long?,
+        watchedTags: Set<String>,
+        watchedUsers: Set<Long>
+    ): List<Post> {
+        return allPosts.filter { post ->
+            // Show user's own posts/drafts
+            post.author.id == userId ||
+                    // Show published posts from watched users
+                    (post.isPublished && post.author.id in watchedUsers) ||
+                    // Show published posts with watched tags
+                    (post.isPublished && post.tag in watchedTags)
+        }
+    }
+
+    fun completeLanding() {
+        _authState.update { it.copy(hasSeenLanding = true) }
     }
 
     fun setAuthMode(mode: AuthMode) {
@@ -174,7 +205,6 @@ class AppViewModel(
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
             try {
-                // Convert isDraft to isPublished (opposite)
                 val isPublished = !isDraft
                 repository.createPost(userId, title, body, tag, isPublished)
                 val message = if (isDraft) "Post saved as draft" else "Post published"
@@ -192,6 +222,28 @@ class AppViewModel(
                 _uiState.update { it.copy(infoMessage = "Post updated") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to update post") }
+            }
+        }
+    }
+
+    fun deletePost(postId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.deletePost(postId)
+                _uiState.update { it.copy(infoMessage = "Post deleted") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Unable to delete post") }
+            }
+        }
+    }
+
+    fun publishDraft(postId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.publishDraft(postId)
+                _uiState.update { it.copy(infoMessage = "Post published") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Unable to publish post") }
             }
         }
     }
@@ -246,7 +298,7 @@ class AppViewModel(
         viewModelScope.launch {
             try {
                 repository.createPrompt(userId, title, description, content, tag, isPrivate)
-                val message = if (isPrivate) "Private prompt saved" else "Prompt shared"
+                val message = if (isPrivate) "Private prompt saved" else "Prompt shared with community"
                 _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to share prompt") }
@@ -281,7 +333,7 @@ class AppViewModel(
             val newSearch = state.searchState.copy(
                 postSearchType = type,
                 keyword = keyword
-            ).recompute(state.posts, state.prompts)
+            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
             state.copy(searchState = newSearch)
         }
     }
@@ -290,8 +342,39 @@ class AppViewModel(
         _uiState.update { state ->
             val newSearch = state.searchState.copy(
                 promptTag = tag
-            ).recompute(state.posts, state.prompts)
+            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
             state.copy(searchState = newSearch)
+        }
+    }
+
+    fun searchUsers(email: String) {
+        _uiState.update { state ->
+            val newSearch = state.searchState.copy(
+                userEmail = email
+            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
+            state.copy(searchState = newSearch)
+        }
+    }
+
+    fun watchTag(tag: String) {
+        _uiState.update { state ->
+            val newTags = if (tag in state.watchedTags) {
+                state.watchedTags - tag
+            } else {
+                state.watchedTags + tag
+            }
+            state.copy(watchedTags = newTags)
+        }
+    }
+
+    fun watchUser(userId: Long) {
+        _uiState.update { state ->
+            val newUsers = if (userId in state.watchedUsers) {
+                state.watchedUsers - userId
+            } else {
+                state.watchedUsers + userId
+            }
+            state.copy(watchedUsers = newUsers)
         }
     }
 
@@ -303,7 +386,7 @@ class AppViewModel(
         _authState.update { it.copy(errorMessage = null) }
     }
 
-    private fun buildPosts(
+    private fun buildAllPosts(
         snapshot: AppDataSnapshot,
         userProfiles: Map<Long, UserProfile>,
         currentUserId: Long?
@@ -314,11 +397,7 @@ class AppViewModel(
         val commentsByPost = snapshot.comments.groupBy { it.postId }
 
         return snapshot.posts.sortedByDescending { it.createdAt }.mapNotNull { post ->
-            // Filter: show only published posts OR user's own drafts
-            if (!post.isPublished && post.authorId != currentUserId) {
-                return@mapNotNull null
-            }
-
+            // Show all posts - filtering happens in filterFeedPosts
             val author = userSummaries[post.authorId] ?: return@mapNotNull null
             val postComments = commentsByPost[post.id].orEmpty().mapNotNull { comment ->
                 val commentAuthor = userSummaries[comment.authorId] ?: return@mapNotNull null

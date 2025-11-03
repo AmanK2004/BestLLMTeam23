@@ -84,6 +84,10 @@ interface AppRepository {
         tag: String
     )
 
+    suspend fun deletePost(postId: Long)
+
+    suspend fun publishDraft(postId: Long)
+
     suspend fun createComment(
         postId: Long,
         authorId: Long,
@@ -373,6 +377,21 @@ class RoomAppRepository(
             tag = tag.trim(),
             updatedAt = System.currentTimeMillis(),
             isEdited = true
+        )
+        postDao.update(updated)
+    }
+
+    override suspend fun deletePost(postId: Long) {
+        postDao.delete(postId)
+    }
+
+    override suspend fun publishDraft(postId: Long) {
+        val existing = postDao.getById(postId)
+            ?: throw IllegalArgumentException("Post not found")
+
+        val updated = existing.copy(
+            isPublished = true,
+            updatedAt = System.currentTimeMillis()
         )
         postDao.update(updated)
     }

@@ -42,6 +42,9 @@ interface PostDao {
     @Update
     suspend fun update(post: PostEntity)
 
+    @Query("DELETE FROM posts WHERE id = :postId")
+    suspend fun delete(postId: Long)
+
     @Query("SELECT * FROM posts WHERE id = :postId LIMIT 1")
     suspend fun getById(postId: Long): PostEntity?
 

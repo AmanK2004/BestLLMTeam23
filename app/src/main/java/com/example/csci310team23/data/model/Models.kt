@@ -1,5 +1,6 @@
 package com.example.csci310team23.data.model
 
+import com.example.csci310team23.ui.UserSearchResult
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -83,14 +84,18 @@ data class SearchState(
     val keyword: String = "",
     val postResults: List<Post> = emptyList(),
     val promptTag: String = "",
-    val promptResults: List<Prompt> = emptyList()
+    val promptResults: List<Prompt> = emptyList(),
+    val userEmail: String = "",
+    val userResults: List<UserSearchResult> = emptyList(),
+    val allUsers: List<UserProfile> = emptyList()
 ) {
-    fun recompute(posts: List<Post>, prompts: List<Prompt>): SearchState {
+    fun recompute(posts: List<Post>, prompts: List<Prompt>, users: List<UserProfile>): SearchState {
         val refreshedPosts = if (postSearchType != null && keyword.isNotBlank()) {
             posts.filterBy(postSearchType, keyword)
         } else {
             emptyList()
         }
+
         val refreshedPrompts = if (promptTag.isNotBlank()) {
             prompts.filter {
                 !it.isPrivate && it.tag.equals(promptTag, ignoreCase = true)
@@ -98,7 +103,27 @@ data class SearchState(
         } else {
             emptyList()
         }
-        return copy(postResults = refreshedPosts, promptResults = refreshedPrompts)
+
+        val refreshedUsers = if (userEmail.isNotBlank()) {
+            val matchingUser = users.firstOrNull {
+                it.email.equals(userEmail.trim(), ignoreCase = true)
+            }
+            matchingUser?.let { user ->
+                val userPrompts = prompts.filter {
+                    it.author.id == user.id && !it.isPrivate
+                }
+                listOf(UserSearchResult(user.summary, userPrompts))
+            } ?: emptyList()
+        } else {
+            emptyList()
+        }
+
+        return copy(
+            postResults = refreshedPosts,
+            promptResults = refreshedPrompts,
+            userResults = refreshedUsers,
+            allUsers = users
+        )
     }
 }
 
