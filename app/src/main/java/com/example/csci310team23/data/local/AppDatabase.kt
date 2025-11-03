@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         PostVoteEntity::class,
         CommentVoteEntity::class
     ],
-    version = 1,
+    version = 2,  // Incremented version for new fields
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

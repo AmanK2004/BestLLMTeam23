@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -402,7 +403,9 @@ private fun MainScreen(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
                 posts = uiState.posts,
-                onCreatePost = viewModel::createPost,
+                onCreatePost = { title, body, tag, isDraft ->
+                    viewModel.createPost(title, body, tag, isDraft)
+                },
                 onUpdatePost = viewModel::updatePost,
                 onCreateComment = viewModel::createComment,
                 onUpdateComment = viewModel::updateComment,
@@ -421,8 +424,12 @@ private fun MainScreen(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
                 prompts = uiState.prompts,
-                onCreatePrompt = viewModel::createPrompt,
-                onUpdatePrompt = viewModel::updatePrompt,
+                onCreatePrompt = { title, description, content, tag, isPrivate ->
+                    viewModel.createPrompt(title, description, content, tag, isPrivate)
+                },
+                onUpdatePrompt = { id, title, description, content, tag, isPrivate ->
+                    viewModel.updatePrompt(id, title, description, content, tag, isPrivate)
+                },
                 onDeletePrompt = viewModel::deletePrompt
             )
 
@@ -450,7 +457,7 @@ private fun FeedSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
     posts: List<Post>,
-    onCreatePost: (String, String, String) -> Unit,
+    onCreatePost: (String, String, String, Boolean) -> Unit,  // Updated
     onUpdatePost: (Long, String, String, String) -> Unit,
     onCreateComment: (Long, String?, String) -> Unit,
     onUpdateComment: (Long, String?, String) -> Unit,
@@ -464,7 +471,7 @@ private fun FeedSection(
     ) {
         item {
             if (currentUser != null) {
-                CreatePostCard(onCreatePost = onCreatePost)
+                CreatePostCard(onCreatePost = onCreatePost)  // Fixed
             }
         }
         items(posts, key = { it.id }) { post ->
@@ -489,6 +496,7 @@ private fun FeedSection(
         }
     }
 }
+
 
 @Composable
 private fun TrendingSection(
@@ -530,8 +538,8 @@ private fun PromptSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
     prompts: List<Prompt>,
-    onCreatePrompt: (String, String, String, String) -> Unit,
-    onUpdatePrompt: (Long, String, String, String, String) -> Unit,
+    onCreatePrompt: (String, String, String, String, Boolean) -> Unit,  // Updated
+    onUpdatePrompt: (Long, String, String, String, String, Boolean) -> Unit,  // Updated
     onDeletePrompt: (Long) -> Unit
 ) {
     LazyColumn(
@@ -541,14 +549,14 @@ private fun PromptSection(
     ) {
         item {
             if (currentUser != null) {
-                CreatePromptCard(onCreatePrompt = onCreatePrompt)
+                CreatePromptCard(onCreatePrompt = onCreatePrompt)  // Fixed
             }
         }
         items(prompts, key = { it.id }) { prompt ->
             PromptCard(
                 prompt = prompt,
                 canEdit = currentUser?.id == prompt.author.id,
-                onUpdatePrompt = onUpdatePrompt,
+                onUpdatePrompt = onUpdatePrompt,  // Fixed
                 onDeletePrompt = onDeletePrompt
             )
         }
@@ -782,11 +790,12 @@ private fun ProfileSection(
 
 @Composable
 private fun CreatePostCard(
-    onCreatePost: (String, String, String) -> Unit
+    onCreatePost: (String, String, String, Boolean) -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var tag by rememberSaveable { mutableStateOf("") }
     var body by rememberSaveable { mutableStateOf("") }
+    var isDraft by rememberSaveable { mutableStateOf(false) } // Add this state
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -818,14 +827,27 @@ private fun CreatePostCard(
                     .fillMaxWidth()
                     .heightIn(min = 160.dp)
             )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isDraft,
+                    onCheckedChange = { isDraft = it }
+                )
+                Text("Save as Draft")
+            }
+
             Button(onClick = {
                 if (title.isBlank() || tag.isBlank() || body.isBlank()) return@Button
-                onCreatePost(title.trim(), body.trim(), tag.trim())
+                onCreatePost(title.trim(), body.trim(), tag.trim(), isDraft)
                 title = ""
                 tag = ""
                 body = ""
+                isDraft = false
             }) {
-                Text("Publish")
+                Text(if (isDraft) "Save as Draft" else "Publish Post")
             }
         }
     }
@@ -860,15 +882,34 @@ private fun PostCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = post.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "${post.author.name} - ${post.createdAt.formatRelative()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = post.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (!post.isPublished) {
+                            Text(
+                                text = "!!Draft",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "${post.author.name} - ${post.createdAt.formatRelative()}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (post.isEdited) {
+                            Text(
+                                text = "(edited)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = "#${post.tag}",
@@ -1012,10 +1053,19 @@ private fun CommentCard(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
-            Text(
-                text = "${comment.author.name} - ${comment.createdAt.formatRelative()}",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "${comment.author.name} - ${comment.createdAt.formatRelative()}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (comment.isEdited) {
+                    Text(
+                        text = "(edited)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
             Text(comment.body)
             VoteRow(
                 score = comment.voteSummary.score,
@@ -1109,12 +1159,13 @@ private fun VoteRow(
 
 @Composable
 private fun CreatePromptCard(
-    onCreatePrompt: (String, String, String, String) -> Unit
+    onCreatePrompt: (String, String, String, String, Boolean) -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
     var tag by rememberSaveable { mutableStateOf("") }
+    var isPrivate by rememberSaveable { mutableStateOf(false) }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -1152,15 +1203,26 @@ private fun CreatePromptCard(
                 label = { Text("LLM Tag") },
                 modifier = Modifier.fillMaxWidth()
             )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isPrivate,
+                    onCheckedChange = { isPrivate = it }
+                )
+                Text("Keep Private")
+            }
             Button(onClick = {
                 if (title.isBlank() || content.isBlank() || tag.isBlank()) return@Button
-                onCreatePrompt(title.trim(), description.trim(), content.trim(), tag.trim())
+                onCreatePrompt(title.trim(), description.trim(), content.trim(), tag.trim(), isPrivate)
                 title = ""
                 description = ""
                 content = ""
                 tag = ""
+                isPrivate = false  // ADD THIS LINE
             }) {
-                Text("Share Prompt")
+                Text(if (isPrivate) "Save Private Prompt" else "Share Prompt")  // UPDATE TEXT
             }
         }
     }
@@ -1170,7 +1232,7 @@ private fun CreatePromptCard(
 private fun PromptCard(
     prompt: Prompt,
     canEdit: Boolean,
-    onUpdatePrompt: (Long, String, String, String, String) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, Boolean) -> Unit,
     onDeletePrompt: (Long) -> Unit
 ) {
     var showEdit by remember { mutableStateOf(false) }
@@ -1178,6 +1240,7 @@ private fun PromptCard(
     var editDescription by remember { mutableStateOf(prompt.description) }
     var editContent by remember { mutableStateOf(prompt.content) }
     var editTag by remember { mutableStateOf(prompt.tag) }
+    var editIsPrivate by remember { mutableStateOf(prompt.isPrivate) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -1195,10 +1258,20 @@ private fun PromptCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(
-                        text = "${prompt.author.name} - ${prompt.createdAt.formatRelative()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "${prompt.author.name} - ${prompt.createdAt.formatRelative()}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (prompt.isPrivate) {
+                            Text(
+                                text = "(x) Private",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+
                 }
                 Text(
                     text = "#${prompt.tag}",
@@ -1220,6 +1293,7 @@ private fun PromptCard(
                         editDescription = prompt.description
                         editContent = prompt.content
                         editTag = prompt.tag
+                        editIsPrivate = prompt.isPrivate  // ADD THIS LINE
                         showEdit = true
                     }) {
                         Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -1241,7 +1315,7 @@ private fun PromptCard(
             onDismissRequest = { showEdit = false },
             confirmButton = {
                 TextButton(onClick = {
-                    onUpdatePrompt(prompt.id, editTitle.trim(), editDescription.trim(), editContent.trim(), editTag.trim())
+                    onUpdatePrompt(prompt.id, editTitle.trim(), editDescription.trim(), editContent.trim(), editTag.trim(), editIsPrivate)  // ADD editIsPrivate
                     showEdit = false
                 }) { Text("Save") }
             },
@@ -1277,6 +1351,16 @@ private fun PromptCard(
                         label = { Text("Tag") },
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = editIsPrivate,
+                            onCheckedChange = { editIsPrivate = it }
+                        )
+                        Text("Keep Private")
+                    }
                 }
             }
         )

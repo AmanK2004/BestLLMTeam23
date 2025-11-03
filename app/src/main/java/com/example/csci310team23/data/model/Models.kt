@@ -20,7 +20,8 @@ data class UserProfile(
     val department: String,
     val school: String,
     val birthDate: LocalDate?,
-    val bio: String
+    val bio: String,
+    val isProfileComplete: Boolean = false
 ) {
     val summary: UserSummary
         get() = UserSummary(id, name, email, department, school)
@@ -43,7 +44,8 @@ data class Comment(
     val createdAt: Instant,
     val updatedAt: Instant,
     val voteSummary: VoteSummary,
-    val currentUserVote: Int?
+    val currentUserVote: Int?,
+    val isEdited: Boolean = false
 )
 
 data class Post(
@@ -57,7 +59,9 @@ data class Post(
     val commentCount: Int,
     val comments: List<Comment>,
     val voteSummary: VoteSummary,
-    val currentUserVote: Int?
+    val currentUserVote: Int?,
+    val isPublished: Boolean = true,
+    val isEdited: Boolean = false
 )
 
 data class Prompt(
@@ -68,7 +72,8 @@ data class Prompt(
     val content: String,
     val tag: String,
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val isPrivate: Boolean = false
 )
 
 enum class PostSearchType { TAG, AUTHOR, TITLE, FULL_TEXT }
@@ -87,7 +92,9 @@ data class SearchState(
             emptyList()
         }
         val refreshedPrompts = if (promptTag.isNotBlank()) {
-            prompts.filter { it.tag.equals(promptTag, ignoreCase = true) }
+            prompts.filter {
+                !it.isPrivate && it.tag.equals(promptTag, ignoreCase = true)
+            }
         } else {
             emptyList()
         }

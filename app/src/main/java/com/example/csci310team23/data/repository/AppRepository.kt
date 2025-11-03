@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
 import java.time.LocalDate
+import java.time.Period
 
 data class AppDataSnapshot(
     val users: List<UserEntity>,
@@ -72,7 +73,8 @@ interface AppRepository {
         authorId: Long,
         title: String,
         body: String,
-        tag: String
+        tag: String,
+        isPublished: Boolean = true
     ): Long
 
     suspend fun updatePost(
@@ -112,7 +114,8 @@ interface AppRepository {
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        isPrivate: Boolean = false
     ): Long
 
     suspend fun updatePrompt(
@@ -120,7 +123,8 @@ interface AppRepository {
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        isPrivate: Boolean = false
     )
 
     suspend fun deletePrompt(promptId: Long)
@@ -135,19 +139,35 @@ class RoomAppRepository(
     private val commentVoteDao: CommentVoteDao
 ) : AppRepository {
 
+    companion object {
+        const val MAX_BIO_LENGTH = 500
+        const val MIN_AGE_YEARS = 18
+    }
+
     override suspend fun registerUser(
         name: String,
         email: String,
         studentId: String,
         password: String
     ): UserProfile {
+        // Validate all fields are provided
+        if (name.isBlank() || email.isBlank() || studentId.isBlank() || password.isBlank()) {
+            throw IllegalArgumentException("All fields are required")
+        }
+
         val normalizedEmail = email.lowercase()
+
+        // Validate USC email
         if (!normalizedEmail.endsWith("@usc.edu")) {
-            throw IllegalArgumentException("Email must end with @usc.edu")
+            throw IllegalArgumentException("Please use a valid USC email address (@usc.edu)")
         }
+
+        // Validate student ID format
         if (!studentId.matches(Regex("^\\d{10}\$"))) {
-            throw IllegalArgumentException("Student ID must be a 10-digit number")
+            throw IllegalArgumentException("Student ID must be exactly 10 digits")
         }
+
+        // Check if email already registered
         val existing = userDao.getByEmail(normalizedEmail)
         if (existing != null) {
             throw IllegalStateException("An account already exists for $normalizedEmail")
@@ -161,7 +181,8 @@ class RoomAppRepository(
             department = "",
             school = "",
             birthDateEpochDay = null,
-            bio = ""
+            bio = "",
+            isProfileComplete = false
         )
 
         val id = userDao.insert(entity)
@@ -176,10 +197,28 @@ class RoomAppRepository(
         birthDate: LocalDate?,
         bio: String
     ): UserProfile {
-        val existing = userDao.getById(userId) ?: throw IllegalArgumentException("User not found")
+        val existing = userDao.getById(userId)
+            ?: throw IllegalArgumentException("User not found")
+
+        // Validate required fields
         if (department.isBlank() || school.isBlank()) {
-            throw IllegalArgumentException("Affiliation fields cannot be blank")
+            throw IllegalArgumentException("Please complete all required fields")
         }
+
+        // Validate bio length
+        if (bio.length > MAX_BIO_LENGTH) {
+            throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
+        }
+
+        // Validate age (must be 18+)
+        if (birthDate != null) {
+            val age = Period.between(birthDate, LocalDate.now()).years
+            if (age < MIN_AGE_YEARS) {
+                throw IllegalArgumentException("You must be 18 or older")
+            }
+        }
+
+        // Check affiliation immutability
         if (existing.department.isNotBlank() || existing.school.isNotBlank()) {
             if (existing.department != department.trim() || existing.school != school.trim()) {
                 throw IllegalStateException("Affiliation cannot be changed after profile creation")
@@ -190,7 +229,8 @@ class RoomAppRepository(
             department = department.trim(),
             school = school.trim(),
             birthDateEpochDay = birthDate.toEpochDayOrNull(),
-            bio = bio.trim()
+            bio = bio.trim(),
+            isProfileComplete = true
         )
 
         userDao.update(updated)
@@ -207,8 +247,27 @@ class RoomAppRepository(
         }
     }
 
-    override suspend fun updateProfile(userId: Long, birthDate: LocalDate?, bio: String): UserProfile {
-        val existing = userDao.getById(userId) ?: throw IllegalArgumentException("User not found")
+    override suspend fun updateProfile(
+        userId: Long,
+        birthDate: LocalDate?,
+        bio: String
+    ): UserProfile {
+        val existing = userDao.getById(userId)
+            ?: throw IllegalArgumentException("User not found")
+
+        // Validate bio length
+        if (bio.length > MAX_BIO_LENGTH) {
+            throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
+        }
+
+        // Validate age if birthdate provided
+        if (birthDate != null) {
+            val age = Period.between(birthDate, LocalDate.now()).years
+            if (age < MIN_AGE_YEARS) {
+                throw IllegalArgumentException("You must be 18 or older")
+            }
+        }
+
         val updated = existing.copy(
             birthDateEpochDay = birthDate.toEpochDayOrNull(),
             bio = bio.trim()
@@ -260,7 +319,22 @@ class RoomAppRepository(
         }
     }
 
-    override suspend fun createPost(authorId: Long, title: String, body: String, tag: String): Long {
+    override suspend fun createPost(
+        authorId: Long,
+        title: String,
+        body: String,
+        tag: String,
+        isPublished: Boolean
+    ): Long {
+        // Validate required fields
+        if (title.isBlank() || body.isBlank()) {
+            throw IllegalArgumentException("Title and body are required")
+        }
+
+        if (tag.isBlank()) {
+            throw IllegalArgumentException("Please select an LLM tag")
+        }
+
         val now = System.currentTimeMillis()
         val entity = PostEntity(
             authorId = authorId,
@@ -268,18 +342,37 @@ class RoomAppRepository(
             body = body.trim(),
             tag = tag.trim(),
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isPublished = isPublished,
+            isEdited = false
         )
         return postDao.insert(entity)
     }
 
-    override suspend fun updatePost(postId: Long, title: String, body: String, tag: String) {
-        val existing = postDao.getById(postId) ?: throw IllegalArgumentException("Post not found")
+    override suspend fun updatePost(
+        postId: Long,
+        title: String,
+        body: String,
+        tag: String
+    ) {
+        val existing = postDao.getById(postId)
+            ?: throw IllegalArgumentException("Post not found")
+
+        // Validate required fields
+        if (title.isBlank() || body.isBlank()) {
+            throw IllegalArgumentException("Title and body are required")
+        }
+
+        if (tag.isBlank()) {
+            throw IllegalArgumentException("Please select an LLM tag")
+        }
+
         val updated = existing.copy(
             title = title.trim(),
             body = body.trim(),
             tag = tag.trim(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            isEdited = true
         )
         postDao.update(updated)
     }
@@ -290,6 +383,11 @@ class RoomAppRepository(
         title: String?,
         body: String
     ): Long {
+        // Validate comment body
+        if (body.isBlank()) {
+            throw IllegalArgumentException("Comment cannot be empty")
+        }
+
         val now = System.currentTimeMillis()
         val entity = CommentEntity(
             postId = postId,
@@ -297,17 +395,30 @@ class RoomAppRepository(
             title = title?.takeIf { it.isNotBlank() }?.trim(),
             body = body.trim(),
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isEdited = false
         )
         return commentDao.insert(entity)
     }
 
-    override suspend fun updateComment(commentId: Long, title: String?, body: String) {
-        val existing = commentDao.getById(commentId) ?: throw IllegalArgumentException("Comment not found")
+    override suspend fun updateComment(
+        commentId: Long,
+        title: String?,
+        body: String
+    ) {
+        val existing = commentDao.getById(commentId)
+            ?: throw IllegalArgumentException("Comment not found")
+
+        // Validate comment body
+        if (body.isBlank()) {
+            throw IllegalArgumentException("Comment cannot be empty")
+        }
+
         val updated = existing.copy(
             title = title?.takeIf { it.isNotBlank() }?.trim(),
             body = body.trim(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            isEdited = true
         )
         commentDao.update(updated)
     }
@@ -345,8 +456,14 @@ class RoomAppRepository(
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        isPrivate: Boolean
     ): Long {
+        // Validate all required fields
+        if (title.isBlank() || description.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("All fields are required")
+        }
+
         val now = System.currentTimeMillis()
         val entity = PromptEntity(
             authorId = authorId,
@@ -355,7 +472,8 @@ class RoomAppRepository(
             content = content.trim(),
             tag = tag.trim(),
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isPrivate = isPrivate
         )
         return promptDao.insert(entity)
     }
@@ -365,15 +483,24 @@ class RoomAppRepository(
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        isPrivate: Boolean
     ) {
-        val existing = promptDao.getById(promptId) ?: throw IllegalArgumentException("Prompt not found")
+        val existing = promptDao.getById(promptId)
+            ?: throw IllegalArgumentException("Prompt not found")
+
+        // Validate all required fields
+        if (title.isBlank() || description.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("All fields are required")
+        }
+
         val updated = existing.copy(
             title = title.trim(),
             description = description.trim(),
             content = content.trim(),
             tag = tag.trim(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            isPrivate = isPrivate
         )
         promptDao.update(updated)
     }

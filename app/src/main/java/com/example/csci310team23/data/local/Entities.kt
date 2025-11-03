@@ -15,7 +15,8 @@ data class UserEntity(
     val department: String,
     val school: String,
     val birthDateEpochDay: Long?,
-    val bio: String
+    val bio: String,
+    val isProfileComplete: Boolean = false
 )
 
 @Entity(
@@ -37,7 +38,9 @@ data class PostEntity(
     val body: String,
     val tag: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPublished: Boolean = true,
+    val isEdited: Boolean = false
 )
 
 @Entity(
@@ -65,7 +68,8 @@ data class CommentEntity(
     val title: String?,
     val body: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isEdited: Boolean = false
 )
 
 @Entity(
@@ -88,7 +92,8 @@ data class PromptEntity(
     val content: String,
     val tag: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPrivate: Boolean = false
 )
 
 @Entity(

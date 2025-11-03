@@ -66,13 +66,18 @@ class AppViewModel(
                 val userProfiles = snapshot.users.associate { it.id to it.toProfile() }
                 val currentUser = userId?.let { userProfiles[it] }
                 val posts = buildPosts(snapshot, userProfiles, userId)
-                val prompts = buildPrompts(snapshot, userProfiles)
-                val trending = posts.sortedWith(
-                    compareByDescending<Post> { it.voteSummary.upvotes }
-                        .thenByDescending { it.voteSummary.score }
-                        .thenByDescending { it.createdAt }
-                ).take(TRENDING_LIMIT)
-                val requiresProfile = currentUser?.let { it.department.isBlank() || it.school.isBlank() } == true
+                val prompts = buildPrompts(snapshot, userProfiles, userId)
+                val trending = posts
+                    .filter { it.isPublished } // Only published posts in trending
+                    .sortedWith(
+                        compareByDescending<Post> { it.voteSummary.upvotes }
+                            .thenByDescending { it.voteSummary.score }
+                            .thenByDescending { it.createdAt }
+                    ).take(TRENDING_LIMIT)
+
+                // Check if profile is incomplete using isProfileComplete flag
+                val requiresProfile = currentUser?.let { !it.isProfileComplete } == true
+
                 _uiState.update { state ->
                     val updatedSearch = state.searchState.recompute(posts, prompts)
                     state.copy(
@@ -165,12 +170,15 @@ class AppViewModel(
         _uiState.update { it.copy(infoMessage = "Signed out", errorMessage = null) }
     }
 
-    fun createPost(title: String, body: String, tag: String) {
+    fun createPost(title: String, body: String, tag: String, isDraft: Boolean = false) {
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
             try {
-                repository.createPost(userId, title, body, tag)
-                _uiState.update { it.copy(infoMessage = "Post published") }
+                // Convert isDraft to isPublished (opposite)
+                val isPublished = !isDraft
+                repository.createPost(userId, title, body, tag, isPublished)
+                val message = if (isDraft) "Post saved as draft" else "Post published"
+                _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to create post") }
             }
@@ -233,22 +241,23 @@ class AppViewModel(
         }
     }
 
-    fun createPrompt(title: String, description: String, content: String, tag: String) {
+    fun createPrompt(title: String, description: String, content: String, tag: String, isPrivate: Boolean = false) {
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
             try {
-                repository.createPrompt(userId, title, description, content, tag)
-                _uiState.update { it.copy(infoMessage = "Prompt shared") }
+                repository.createPrompt(userId, title, description, content, tag, isPrivate)
+                val message = if (isPrivate) "Private prompt saved" else "Prompt shared"
+                _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to share prompt") }
             }
         }
     }
 
-    fun updatePrompt(promptId: Long, title: String, description: String, content: String, tag: String) {
+    fun updatePrompt(promptId: Long, title: String, description: String, content: String, tag: String, isPrivate: Boolean) {
         viewModelScope.launch {
             try {
-                repository.updatePrompt(promptId, title, description, content, tag)
+                repository.updatePrompt(promptId, title, description, content, tag, isPrivate)
                 _uiState.update { it.copy(infoMessage = "Prompt updated") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to update prompt") }
@@ -305,6 +314,11 @@ class AppViewModel(
         val commentsByPost = snapshot.comments.groupBy { it.postId }
 
         return snapshot.posts.sortedByDescending { it.createdAt }.mapNotNull { post ->
+            // Filter: show only published posts OR user's own drafts
+            if (!post.isPublished && post.authorId != currentUserId) {
+                return@mapNotNull null
+            }
+
             val author = userSummaries[post.authorId] ?: return@mapNotNull null
             val postComments = commentsByPost[post.id].orEmpty().mapNotNull { comment ->
                 val commentAuthor = userSummaries[comment.authorId] ?: return@mapNotNull null
@@ -326,11 +340,17 @@ class AppViewModel(
 
     private fun buildPrompts(
         snapshot: AppDataSnapshot,
-        userProfiles: Map<Long, UserProfile>
+        userProfiles: Map<Long, UserProfile>,
+        currentUserId: Long?
     ): List<Prompt> {
         val userSummaries = userProfiles.mapValues { (_, profile) -> profile.summary }
         return snapshot.prompts.sortedByDescending { it.createdAt }
             .mapNotNull { prompt ->
+                // Filter: show public prompts OR user's own private prompts
+                if (prompt.isPrivate && prompt.authorId != currentUserId) {
+                    return@mapNotNull null
+                }
+
                 val author = userSummaries[prompt.authorId] ?: return@mapNotNull null
                 prompt.toDomain(author)
             }
