@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
     tableName = "users",
     indices = [Index(value = ["email"], unique = true), Index(value = ["studentId"], unique = true)]
 )
+
 data class UserEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -34,6 +35,7 @@ data class UserEntity(
     ],
     indices = [Index(value = ["authorId"]), Index(value = ["tag"])]
 )
+
 data class PostEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val authorId: Long,
@@ -64,6 +66,7 @@ data class PostEntity(
     ],
     indices = [Index(value = ["postId"]), Index(value = ["authorId"])]
 )
+
 data class CommentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val postId: Long,
@@ -87,6 +90,7 @@ data class CommentEntity(
     ],
     indices = [Index(value = ["authorId"]), Index(value = ["tag"])]
 )
+
 data class PromptEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val authorId: Long,
@@ -123,6 +127,7 @@ data class PromptEntity(
         Index(value = ["userId"])
     ]
 )
+
 data class PostVoteEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val postId: Long,
@@ -151,6 +156,7 @@ data class PostVoteEntity(
         Index(value = ["userId"])
     ]
 )
+
 data class CommentVoteEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val commentId: Long,

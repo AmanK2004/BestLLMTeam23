@@ -8,7 +8,7 @@ import java.time.ZoneOffset
 data class UserSummary(
     val id: Long,
     val name: String,
-    val email: String,
+    val email: String, // Add this line
     val department: String,
     val school: String
 )
@@ -171,3 +171,15 @@ private fun List<Post>.filterBy(type: PostSearchType, keyword: String): List<Pos
         }
     }
 }
+
+data class TagWatchHistory(
+    val tag: String,
+    val startTime: Instant,
+    val endTime: Instant? = null // null means currently watching
+)
+
+data class UserWatchHistory(
+    val email: String,
+    val startTime: Instant,
+    val endTime: Instant? = null // null means currently watching
+)

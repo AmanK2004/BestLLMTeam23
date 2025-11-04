@@ -9,19 +9,23 @@ import com.example.csci310team23.data.model.Post
 import com.example.csci310team23.data.model.PostSearchType
 import com.example.csci310team23.data.model.Prompt
 import com.example.csci310team23.data.model.SearchState
+import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
 import com.example.csci310team23.data.model.UserSummary
+import com.example.csci310team23.data.model.UserWatchHistory
 import com.example.csci310team23.data.model.VoteSummary
 import com.example.csci310team23.data.model.toDomain
 import com.example.csci310team23.data.model.toProfile
 import com.example.csci310team23.data.repository.AppDataSnapshot
 import com.example.csci310team23.data.repository.AppRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 
 data class UserSearchResult(
@@ -44,12 +48,14 @@ data class AppUiState(
     val prompts: List<Prompt> = emptyList(),
     val trending: List<Post> = emptyList(),
     val searchState: SearchState = SearchState(),
-    val watchedTags: Set<String> = emptySet(),
-    val watchedUserEmails: Set<String> = emptySet(),
+    val watchedTagsHistory: List<TagWatchHistory> = emptyList(),
+    val watchedUsersHistory: List<UserWatchHistory> = emptyList(),
     val allUsers: List<UserProfile> = emptyList(),
     val errorMessage: String? = null,
-    val infoMessage: String? = null
+    val infoMessage: String? = null,
+    val isFeedRefreshing: Boolean = false
 )
+
 
 class AppViewModel(
     private val repository: AppRepository,
@@ -76,11 +82,13 @@ class AppViewModel(
                 val allPrompts = buildPrompts(snapshot, userProfiles, userId)
                 val allUsers = snapshot.users.map { it.toProfile() }
 
+                // REMOVE THE DUPLICATE - use only this one feedPosts declaration
                 val feedPosts = filterFeedPosts(
                     allPosts,
                     userId,
-                    _uiState.value.watchedTags,
-                    _uiState.value.watchedUserEmails
+                    _uiState.value.watchedTagsHistory,
+                    _uiState.value.watchedUsersHistory,
+                    allUsers
                 )
 
                 val trending = allPosts
@@ -113,14 +121,83 @@ class AppViewModel(
     private fun filterFeedPosts(
         allPosts: List<Post>,
         userId: Long?,
-        watchedTags: Set<String>,
-        watchedUserEmails: Set<String>
+        watchedTagsHistory: List<TagWatchHistory>,
+        watchedUsersHistory: List<UserWatchHistory>,
+        allUsers: List<UserProfile> // Add this parameter
     ): List<Post> {
-        return allPosts.filter { post ->
-            post.author.id == userId ||
-                    (post.isPublished && post.author.email in watchedUserEmails) ||
-                    (post.isPublished && post.tag in watchedTags)
+        val userPosts = allPosts.filter { post ->
+            post.author.id == userId
         }
+
+        // Create a mapping of user IDs to emails for fallback
+        val userIdToEmailMap = allUsers.associate { it.id to it.email }
+
+        // Debug: Print watched users and their emails
+        println("DEBUG: Watched users history: $watchedUsersHistory")
+        println("DEBUG: All posts count: ${allPosts.size}")
+        allPosts.forEach { post ->
+            println("DEBUG: Post ${post.id} by ${post.author.email} (${post.author.name})")
+        }
+
+        // Get posts from watched users (all historical posts for users that were ever watched)
+        val watchedUserPosts = allPosts.filter { post ->
+            post.isPublished && watchedUsersHistory.any { userHistory ->
+                // Try matching by email first, then fall back to user ID lookup
+                val matchesByEmail = post.author.email == userHistory.email
+                val matchesById = userIdToEmailMap[post.author.id] == userHistory.email
+
+                val matches = matchesByEmail || matchesById
+                val isInTimeRange =
+                    userHistory.endTime == null || post.createdAt.isBefore(userHistory.endTime)
+
+                if (matches) {
+                    println("DEBUG: Post ${post.id} matches user ${userHistory.email}, in time range: $isInTimeRange")
+                }
+
+                matches && isInTimeRange
+            }
+        }
+
+        // Get posts from watched tags (only during watch period)
+        val watchedTagPosts = allPosts.filter { post ->
+            post.isPublished && watchedTagsHistory.any { tagHistory ->
+                val matches = post.tag == tagHistory.tag
+                val isInTimeRange = post.createdAt.isAfter(tagHistory.startTime) &&
+                        (tagHistory.endTime == null || post.createdAt.isBefore(tagHistory.endTime))
+
+                if (matches) {
+                    println("DEBUG: Post ${post.id} matches tag ${tagHistory.tag}, in time range: $isInTimeRange")
+                }
+
+                matches && isInTimeRange
+            }
+        }
+
+        // Debug: Print what we found
+        println("DEBUG: User posts: ${userPosts.size}")
+        println("DEBUG: Watched user posts: ${watchedUserPosts.size}")
+        println("DEBUG: Watched tag posts: ${watchedTagPosts.size}")
+
+        // Apply limits: 8 from users, 8 from tags
+        val limitedUserPosts = watchedUserPosts
+            .sortedByDescending { it.createdAt }
+            .take(8)
+
+        val limitedTagPosts = watchedTagPosts
+            .sortedByDescending { it.createdAt }
+            .take(8)
+
+        // Combine: own posts + limited watched user posts + limited watched tag posts
+        val combinedPosts = (userPosts + limitedUserPosts + limitedTagPosts)
+            .distinctBy { it.id }
+            .sortedByDescending { it.createdAt }
+
+        println("DEBUG: Final combined posts: ${combinedPosts.size}")
+        combinedPosts.forEach { post ->
+            println("DEBUG: Final post ${post.id} by ${post.author.email}")
+        }
+
+        return combinedPosts
     }
 
     fun completeLanding() {
@@ -414,25 +491,100 @@ class AppViewModel(
         }
     }
 
-    fun watchTag(tag: String) {
-        _uiState.update { state ->
-            val newTags = if (tag in state.watchedTags) {
-                state.watchedTags - tag
-            } else {
-                state.watchedTags + tag
+    // Add this function to force refresh the feed
+// Update the refreshFeed function to actually refresh data
+    fun refreshFeed() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isFeedRefreshing = true) }
+            try {
+                // Force a small delay to show the refresh indicator
+                delay(1000)
+                // The feed will automatically update because we're using flows
+                // The combine block in init will recompute the feed with current watch history
+            } finally {
+                _uiState.update { it.copy(isFeedRefreshing = false) }
             }
-            state.copy(watchedTags = newTags)
         }
     }
 
-    fun watchUser(email: String) {
+    // Update watchTag function to trigger refresh
+    fun watchTag(tag: String) {
         _uiState.update { state ->
-            val newEmails = if (email in state.watchedUserEmails) {
-                state.watchedUserEmails - email
+            val existingHistory = state.watchedTagsHistory.find { it.tag == tag }
+            val newHistory = if (existingHistory != null) {
+                // If currently watching, stop watching by setting end time
+                if (existingHistory.endTime == null) {
+                    state.watchedTagsHistory.map { history ->
+                        if (history.tag == tag) history.copy(endTime = Instant.now()) else history
+                    }
+                } else {
+                    // If previously watched, start watching again
+                    state.watchedTagsHistory + TagWatchHistory(
+                        tag = tag,
+                        startTime = Instant.now(),
+                        endTime = null
+                    )
+                }
             } else {
-                state.watchedUserEmails + email
+                // New watch
+                state.watchedTagsHistory + TagWatchHistory(
+                    tag = tag,
+                    startTime = Instant.now(),
+                    endTime = null
+                )
             }
-            state.copy(watchedUserEmails = newEmails)
+            state.copy(watchedTagsHistory = newHistory)
+        }
+        // Trigger refresh after updating watch state
+        refreshFeed()
+    }
+
+    // Update watchUser function to trigger refresh
+    fun watchUser(email: String) {
+        viewModelScope.launch {
+            // Validate that the user exists
+            val user = repository.getUserByEmail(email)
+            if (user == null) {
+                _uiState.update { state ->
+                    state.copy(errorMessage = "User with email $email not found")
+                }
+                return@launch
+            }
+
+            _uiState.update { state ->
+                val existingHistory = state.watchedUsersHistory.find { it.email == email }
+                val newHistory = if (existingHistory != null) {
+                    // If currently watching, stop watching by setting end time
+                    if (existingHistory.endTime == null) {
+                        state.watchedUsersHistory.map { history ->
+                            if (history.email == email) history.copy(endTime = Instant.now()) else history
+                        }
+                    } else {
+                        // If previously watched, start watching again
+                        state.watchedUsersHistory + UserWatchHistory(
+                            email = email,
+                            startTime = Instant.now(),
+                            endTime = null
+                        )
+                    }
+                } else {
+                    // New watch
+                    state.watchedUsersHistory + UserWatchHistory(
+                        email = email,
+                        startTime = Instant.now(),
+                        endTime = null
+                    )
+                }
+                state.copy(watchedUsersHistory = newHistory)
+            }
+
+            // Show success message
+            _uiState.update { state ->
+                val existingHistory = state.watchedUsersHistory.find { it.email == email }
+                val action =
+                    if (existingHistory?.endTime == null) "watching" else "stopped watching"
+                state.copy(infoMessage = "Now $action ${user.name}")
+            }
         }
     }
 
@@ -463,12 +615,27 @@ class AppViewModel(
         userProfiles: Map<Long, UserProfile>,
         currentUserId: Long?
     ): List<Post> {
-        val userSummaries = userProfiles.mapValues { (_, profile) -> profile.summary }
+        val userSummaries = userProfiles.mapValues { (_, profile) ->
+            UserSummary(
+                id = profile.id,
+                name = profile.name,
+                email = profile.email,
+                department = profile.department,
+                school = profile.school
+            )
+        }
+
+        // Debug: Print user information
+        println("DEBUG: Building posts - total users: ${userProfiles.size}")
+        userProfiles.forEach { (id, profile) ->
+            println("DEBUG: User $id: ${profile.name} (${profile.email})")
+        }
+
         val commentVotes = snapshot.commentVotes.groupBy { it.commentId }
         val postVotes = snapshot.postVotes.groupBy { it.postId }
         val commentsByPost = snapshot.comments.groupBy { it.postId }
 
-        return snapshot.posts.sortedByDescending { it.createdAt }.mapNotNull { post ->
+        val posts = snapshot.posts.sortedByDescending { it.createdAt }.mapNotNull { post ->
             val author = userSummaries[post.authorId] ?: return@mapNotNull null
             val postComments = commentsByPost[post.id].orEmpty().mapNotNull { comment ->
                 val commentAuthor = userSummaries[comment.authorId] ?: return@mapNotNull null
@@ -484,8 +651,15 @@ class AppViewModel(
             val currentVote = currentUserId?.let { id ->
                 votes.firstOrNull { it.userId == id }?.value
             }
+
+            // Debug: Print post information
+            println("DEBUG: Post ${post.id} by ${author.email} (${author.name}) - tag: ${post.tag}")
+
             post.toDomain(author, postComments, summary, currentVote)
         }
+
+        println("DEBUG: Built ${posts.size} posts total")
+        return posts
     }
 
     private fun buildPrompts(
@@ -493,7 +667,15 @@ class AppViewModel(
         userProfiles: Map<Long, UserProfile>,
         currentUserId: Long?
     ): List<Prompt> {
-        val userSummaries = userProfiles.mapValues { (_, profile) -> profile.summary }
+        val userSummaries = userProfiles.mapValues { (_, profile) ->
+            UserSummary(
+                id = profile.id,
+                name = profile.name,
+                email = profile.email, // Include email
+                department = profile.department,
+                school = profile.school
+            )
+        }
         return snapshot.prompts.sortedByDescending { it.createdAt }
             .mapNotNull { prompt ->
                 if (prompt.isPrivate && prompt.authorId != currentUserId) {

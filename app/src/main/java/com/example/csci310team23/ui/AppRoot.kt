@@ -6,13 +6,16 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Publish
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
@@ -88,8 +92,12 @@ import com.example.csci310team23.data.model.Comment
 import com.example.csci310team23.data.model.Post
 import com.example.csci310team23.data.model.PostSearchType
 import com.example.csci310team23.data.model.Prompt
+import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
+import com.example.csci310team23.data.model.UserWatchHistory
 import com.example.csci310team23.data.model.formatRelative
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.time.LocalDate
 import java.util.Calendar
 
@@ -539,6 +547,7 @@ private fun MainScreen(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
                 posts = uiState.posts,
+                isFeedRefreshing = uiState.isFeedRefreshing, // Add this line
                 onCreatePost = { title, body, tag, isDraft ->
                     viewModel.createPost(title, body, tag, isDraft)
                 },
@@ -551,8 +560,8 @@ private fun MainScreen(
                 onVoteComment = viewModel::voteOnComment,
                 onWatchTag = viewModel::watchTag,
                 onWatchUser = viewModel::watchUser,
-                watchedTags = uiState.watchedTags,
-                watchedUsers = uiState.watchedUserEmails,
+                watchedTagsHistory = uiState.watchedTagsHistory,
+                watchedUsersHistory = uiState.watchedUsersHistory,
                 allUsers = uiState.allUsers
             )
 
@@ -623,6 +632,7 @@ private fun FeedSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
     posts: List<Post>,
+    isFeedRefreshing: Boolean,
     onCreatePost: (String, String, String, Boolean) -> Unit,
     onUpdatePost: (Long, String, String, String) -> Unit,
     onDeletePost: (Long) -> Unit,
@@ -633,114 +643,145 @@ private fun FeedSection(
     onVoteComment: (Long, Int) -> Unit,
     onWatchTag: (String) -> Unit,
     onWatchUser: (String) -> Unit,
-    watchedTags: Set<String>,
-    watchedUsers: Set<String>,
+    watchedTagsHistory: List<TagWatchHistory>,
+    watchedUsersHistory: List<UserWatchHistory>,
     allUsers: List<UserProfile>
 ) {
     var showCreatePost by rememberSaveable { mutableStateOf(false) }
     var showWatchDialog by remember { mutableStateOf(false) }
+    val viewModel: AppViewModel = viewModel()
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    SwipeRefresh(
+        state = rememberSwipeRefreshState(isRefreshing = isFeedRefreshing),
+        onRefresh = { viewModel.refreshFeed() },
+        modifier = modifier.fillMaxSize()
     ) {
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Your Feed",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Posts and drafts from you and your watched content",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Your Feed",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Posts and drafts from you and your watched content",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row {
+                                IconButton(
+                                    onClick = { viewModel.refreshFeed() },
+                                    enabled = !isFeedRefreshing
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        "Refresh feed",
+                                        tint = if (isFeedRefreshing) MaterialTheme.colorScheme.onSurface.copy(
+                                            alpha = 0.38f
+                                        )
+                                        else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                IconButton(onClick = { showWatchDialog = true }) {
+                                    Icon(Icons.Filled.BookmarkAdd, "Manage watches")
+                                }
+                            }
                         }
-                        IconButton(onClick = { showWatchDialog = true }) {
-                            Icon(Icons.Filled.BookmarkAdd, "Manage watches")
-                        }
-                    }
 
-                    Button(
-                        onClick = { showCreatePost = !showCreatePost },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            if (showCreatePost) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.size(8.dp))
-                        Text(if (showCreatePost) "Hide" else "Create New Post")
+                        Button(
+                            onClick = { showCreatePost = !showCreatePost },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isFeedRefreshing
+                        ) {
+                            Icon(
+                                if (showCreatePost) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.size(8.dp))
+                            Text(if (showCreatePost) "Hide" else "Create New Post")
+                        }
                     }
                 }
             }
-        }
 
-        item {
-            AnimatedVisibility(
-                visible = showCreatePost,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                if (currentUser != null) {
-                    CreatePostCard(
-                        onCreatePost = { title, body, tag, isDraft ->
-                            onCreatePost(title, body, tag, isDraft)
-                            showCreatePost = false
-                        }
+            item {
+                AnimatedVisibility(
+                    visible = showCreatePost,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    if (currentUser != null) {
+                        CreatePostCard(
+                            onCreatePost = { title, body, tag, isDraft ->
+                                onCreatePost(title, body, tag, isDraft)
+                                showCreatePost = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Show loading placeholders when refreshing, otherwise show actual posts
+            if (isFeedRefreshing) {
+                items(5) { index ->
+                    LoadingPostCard()
+                }
+            } else {
+                items(posts, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        currentUser = currentUser,
+                        onUpdatePost = onUpdatePost,
+                        onDeletePost = onDeletePost,
+                        onPublishDraft = onPublishDraft,
+                        onCreateComment = onCreateComment,
+                        onUpdateComment = onUpdateComment,
+                        onVotePost = onVotePost,
+                        onVoteComment = onVoteComment,
+                        enableCommentComposer = true,
+                        showVoting = post.isPublished
                     )
                 }
-            }
-        }
 
-        items(posts, key = { it.id }) { post ->
-            PostCard(
-                post = post,
-                currentUser = currentUser,
-                onUpdatePost = onUpdatePost,
-                onDeletePost = onDeletePost,
-                onPublishDraft = onPublishDraft,
-                onCreateComment = onCreateComment,
-                onUpdateComment = onUpdateComment,
-                onVotePost = onVotePost,
-                onVoteComment = onVoteComment,
-                enableCommentComposer = true,
-                showVoting = post.isPublished
-            )
-        }
-        if (posts.isEmpty()) {
-            item {
-                Text(
-                    text = "No posts yet. Create your first post or watch tags/users to see content!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 16.dp)
-                )
+                if (posts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No posts yet. Create your first post or watch tags/users to see content!",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+                }
             }
         }
     }
 
     if (showWatchDialog) {
         WatchDialog(
-            watchedTags = watchedTags,
-            watchedUsers = watchedUsers,
+            watchedTagsHistory = watchedTagsHistory,
+            watchedUsersHistory = watchedUsersHistory,
             allUsers = allUsers,
             onWatchTag = onWatchTag,
             onWatchUser = onWatchUser,
@@ -752,8 +793,8 @@ private fun FeedSection(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WatchDialog(
-    watchedTags: Set<String>,
-    watchedUsers: Set<String>,
+    watchedTagsHistory: List<TagWatchHistory>,
+    watchedUsersHistory: List<UserWatchHistory>,
     allUsers: List<UserProfile>,
     onWatchTag: (String) -> Unit,
     onWatchUser: (String) -> Unit,
@@ -804,14 +845,24 @@ private fun WatchDialog(
                     }
                 }
 
-                watchedTags.forEach { tag ->
+                watchedTagsHistory.forEach { tagHistory ->
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("#$tag")
-                        TextButton(onClick = { onWatchTag(tag) }) { Text("Remove") }
+                        Column {
+                            Text("#${tagHistory.tag}")
+                            Text(
+                                text = if (tagHistory.endTime == null) "Currently watching"
+                                else "Stopped watching",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { onWatchTag(tagHistory.tag) }) {
+                            Text(if (tagHistory.endTime == null) "Stop" else "Watch Again")
+                        }
                     }
                 }
 
@@ -840,14 +891,24 @@ private fun WatchDialog(
                         Text("+")
                     }
                 }
-                watchedUsers.forEach { email ->
+                watchedUsersHistory.forEach { userHistory ->
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(email)
-                        TextButton(onClick = { onWatchUser(email) }) { Text("Remove") }
+                        Column {
+                            Text(userHistory.email)
+                            Text(
+                                text = if (userHistory.endTime == null) "Currently watching"
+                                else "Stopped watching",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { onWatchUser(userHistory.email) }) {
+                            Text(if (userHistory.endTime == null) "Stop" else "Watch Again")
+                        }
                     }
                 }
             }
@@ -3016,6 +3077,85 @@ private fun UserSearchCard(
                 text = "No public prompts shared yet",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingPostCard() {
+    BaseContentCard {
+        // Shimmer effect for title
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(24.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape = MaterialTheme.shapes.small
+                    )
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(20.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape = MaterialTheme.shapes.small
+                    )
+            )
+        }
+
+        Spacer(modifier = Modifier.size(8.dp))
+
+        // Shimmer effect for metadata
+        Box(
+            modifier = Modifier
+                .width(120.dp)
+                .height(16.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                    shape = MaterialTheme.shapes.small
+                )
+        )
+
+        Spacer(modifier = Modifier.size(12.dp))
+
+        // Shimmer effect for content
+        repeat(3) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(16.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape = MaterialTheme.shapes.small
+                    )
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+        }
+
+        Spacer(modifier = Modifier.size(8.dp))
+
+        // Shimmer effect for voting row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(80.dp)
+                    .height(20.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+                        shape = MaterialTheme.shapes.small
+                    )
             )
         }
     }

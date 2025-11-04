@@ -8,7 +8,7 @@ import com.example.csci310team23.data.local.UserEntity
 fun UserEntity.toProfile(): UserProfile = UserProfile(
     id = id,
     name = name,
-    email = email,
+    email = email, // Make sure this is included
     studentId = studentId,
     department = department,
     school = school,
@@ -24,7 +24,7 @@ fun PostEntity.toDomain(
     currentUserVote: Int?
 ): Post = Post(
     id = id,
-    author = author,
+    author = author, // This should have the email
     title = title,
     body = body,
     tag = tag,

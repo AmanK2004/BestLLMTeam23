@@ -69,6 +69,8 @@ interface AppRepository {
 
     fun observeData(): Flow<AppDataSnapshot>
 
+    suspend fun getUserByEmail(email: String): UserProfile?
+
     suspend fun createPost(
         authorId: Long,
         title: String,
@@ -194,6 +196,12 @@ class RoomAppRepository(
         val id = userDao.insert(entity)
         return userDao.getById(id)?.toProfile()
             ?: error("User not found after registration")
+    }
+
+    override suspend fun getUserByEmail(email: String): UserProfile? {
+        val normalizedEmail = email.lowercase()
+        val entity = userDao.getByEmail(normalizedEmail)
+        return entity?.toProfile()
     }
 
     override suspend fun completeProfile(
