@@ -875,7 +875,7 @@ private fun WatchDialog(
                     OutlinedTextField(
                         value = userEmail,
                         onValueChange = { userEmail = it },
-                        label = { Text("USC Email") },
+                        label = { Text("USC Email/Display Name") },
                         modifier = Modifier.weight(1f)
                     )
                     Button(
@@ -2585,8 +2585,6 @@ private fun PromptCard(
                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
                         )
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(28.dp))
                 }
             }
         }

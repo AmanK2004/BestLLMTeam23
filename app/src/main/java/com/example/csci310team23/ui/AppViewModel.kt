@@ -532,26 +532,20 @@ class AppViewModel(
             val existingHistory = _uiState.value.watchedTagsHistory.find { it.tag == tag }
 
             val isCurrentlyWatching = existingHistory?.endTime == null
-            val newEndTime = if (isCurrentlyWatching) {
-                Instant.now()
-            } else {
-                null
-            }
-
-            repository.saveTagWatchHistory(userId, tag, Instant.now(), newEndTime)
 
             _uiState.update { state ->
                 val newHistory = if (existingHistory != null) {
                     if (isCurrentlyWatching) {
                         state.watchedTagsHistory.map { history ->
-                            if (history.tag == tag) history.copy(endTime = newEndTime) else history
+                            if (history.tag == tag) history.copy(endTime = Instant.now()) else history
                         }
                     } else {
-                        state.watchedTagsHistory + TagWatchHistory(
-                            tag = tag,
-                            startTime = Instant.now(),
-                            endTime = null
-                        )
+                        state.watchedTagsHistory.map { history ->
+                            if (history.tag == tag) history.copy(
+                                endTime = null,
+                                startTime = Instant.now()
+                            ) else history
+                        }
                     }
                 } else {
                     state.watchedTagsHistory + TagWatchHistory(
@@ -561,6 +555,18 @@ class AppViewModel(
                     )
                 }
                 state.copy(watchedTagsHistory = newHistory)
+            }
+
+            val currentState = _uiState.value
+            val updatedHistory = currentState.watchedTagsHistory.find { it.tag == tag }
+
+            if (updatedHistory != null) {
+                repository.saveTagWatchHistory(
+                    userId,
+                    tag,
+                    updatedHistory.startTime,
+                    updatedHistory.endTime
+                )
             }
 
             _watchedTagsHistoryFlow.value = _uiState.value.watchedTagsHistory
@@ -587,28 +593,21 @@ class AppViewModel(
             }
 
             val isCurrentlyWatching = existingHistory?.endTime == null
-            val newEndTime = if (isCurrentlyWatching) {
-                Instant.now()
-            } else {
-                null
-            }
-
-            repository.saveUserWatchHistory(userId, email, Instant.now(), newEndTime)
 
             _uiState.update { state ->
                 val newHistory = if (existingHistory != null) {
                     if (isCurrentlyWatching) {
                         state.watchedUsersHistory.map { history ->
                             if (history.email.equals(email, ignoreCase = true))
-                                history.copy(endTime = newEndTime)
+                                history.copy(endTime = Instant.now())
                             else history
                         }
                     } else {
-                        state.watchedUsersHistory + UserWatchHistory(
-                            email = email,
-                            startTime = Instant.now(),
-                            endTime = null
-                        )
+                        state.watchedUsersHistory.map { history ->
+                            if (history.email.equals(email, ignoreCase = true))
+                                history.copy(endTime = null, startTime = Instant.now())
+                            else history
+                        }
                     }
                 } else {
                     state.watchedUsersHistory + UserWatchHistory(
@@ -618,6 +617,20 @@ class AppViewModel(
                     )
                 }
                 state.copy(watchedUsersHistory = newHistory)
+            }
+
+            val currentState = _uiState.value
+            val updatedHistory = currentState.watchedUsersHistory.find {
+                it.email.equals(email, ignoreCase = true)
+            }
+
+            if (updatedHistory != null) {
+                repository.saveUserWatchHistory(
+                    userId,
+                    email,
+                    updatedHistory.startTime,
+                    updatedHistory.endTime
+                )
             }
 
             _watchedUsersHistoryFlow.value = _uiState.value.watchedUsersHistory
