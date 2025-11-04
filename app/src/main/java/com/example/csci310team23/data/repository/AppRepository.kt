@@ -13,8 +13,8 @@ import com.example.csci310team23.data.local.PromptEntity
 import com.example.csci310team23.data.local.UserDao
 import com.example.csci310team23.data.local.UserEntity
 import com.example.csci310team23.data.model.UserProfile
-import com.example.csci310team23.data.model.toProfile
 import com.example.csci310team23.data.model.toEpochDayOrNull
+import com.example.csci310team23.data.model.toProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -119,6 +119,9 @@ interface AppRepository {
         description: String,
         content: String,
         tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
         isPrivate: Boolean = false
     ): Long
 
@@ -128,6 +131,9 @@ interface AppRepository {
         description: String,
         content: String,
         tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
         isPrivate: Boolean = false
     )
 
@@ -154,24 +160,20 @@ class RoomAppRepository(
         studentId: String,
         password: String
     ): UserProfile {
-        // Validate all fields are provided
         if (name.isBlank() || email.isBlank() || studentId.isBlank() || password.isBlank()) {
             throw IllegalArgumentException("All fields are required")
         }
 
         val normalizedEmail = email.lowercase()
 
-        // Validate USC email
         if (!normalizedEmail.endsWith("@usc.edu")) {
             throw IllegalArgumentException("Please use a valid USC email address (@usc.edu)")
         }
 
-        // Validate student ID format
         if (!studentId.matches(Regex("^\\d{10}\$"))) {
             throw IllegalArgumentException("Student ID must be exactly 10 digits")
         }
 
-        // Check if email already registered
         val existing = userDao.getByEmail(normalizedEmail)
         if (existing != null) {
             throw IllegalStateException("An account already exists for $normalizedEmail")
@@ -204,17 +206,14 @@ class RoomAppRepository(
         val existing = userDao.getById(userId)
             ?: throw IllegalArgumentException("User not found")
 
-        // Validate required fields
         if (department.isBlank() || school.isBlank()) {
             throw IllegalArgumentException("Please complete all required fields")
         }
 
-        // Validate bio length
         if (bio.length > MAX_BIO_LENGTH) {
             throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
         }
 
-        // Validate age (must be 18+)
         if (birthDate != null) {
             val age = Period.between(birthDate, LocalDate.now()).years
             if (age < MIN_AGE_YEARS) {
@@ -222,7 +221,6 @@ class RoomAppRepository(
             }
         }
 
-        // Check affiliation immutability
         if (existing.department.isNotBlank() || existing.school.isNotBlank()) {
             if (existing.department != department.trim() || existing.school != school.trim()) {
                 throw IllegalStateException("Affiliation cannot be changed after profile creation")
@@ -259,12 +257,10 @@ class RoomAppRepository(
         val existing = userDao.getById(userId)
             ?: throw IllegalArgumentException("User not found")
 
-        // Validate bio length
         if (bio.length > MAX_BIO_LENGTH) {
             throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
         }
 
-        // Validate age if birthdate provided
         if (birthDate != null) {
             val age = Period.between(birthDate, LocalDate.now()).years
             if (age < MIN_AGE_YEARS) {
@@ -330,7 +326,6 @@ class RoomAppRepository(
         tag: String,
         isPublished: Boolean
     ): Long {
-        // Validate required fields
         if (title.isBlank() || body.isBlank()) {
             throw IllegalArgumentException("Title and body are required")
         }
@@ -362,7 +357,6 @@ class RoomAppRepository(
         val existing = postDao.getById(postId)
             ?: throw IllegalArgumentException("Post not found")
 
-        // Validate required fields
         if (title.isBlank() || body.isBlank()) {
             throw IllegalArgumentException("Title and body are required")
         }
@@ -402,7 +396,6 @@ class RoomAppRepository(
         title: String?,
         body: String
     ): Long {
-        // Validate comment body
         if (body.isBlank()) {
             throw IllegalArgumentException("Comment cannot be empty")
         }
@@ -428,7 +421,6 @@ class RoomAppRepository(
         val existing = commentDao.getById(commentId)
             ?: throw IllegalArgumentException("Comment not found")
 
-        // Validate comment body
         if (body.isBlank()) {
             throw IllegalArgumentException("Comment cannot be empty")
         }
@@ -452,6 +444,7 @@ class RoomAppRepository(
                     value = value
                 )
             )
+
             else -> throw IllegalArgumentException("Vote must be -1, 0, or 1")
         }
     }
@@ -466,6 +459,7 @@ class RoomAppRepository(
                     value = value
                 )
             )
+
             else -> throw IllegalArgumentException("Vote must be -1, 0, or 1")
         }
     }
@@ -476,11 +470,13 @@ class RoomAppRepository(
         description: String,
         content: String,
         tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
         isPrivate: Boolean
     ): Long {
-        // Validate all required fields
-        if (title.isBlank() || description.isBlank() || content.isBlank() || tag.isBlank()) {
-            throw IllegalArgumentException("All fields are required")
+        if (title.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("Title, content, and AI model are required")
         }
 
         val now = System.currentTimeMillis()
@@ -490,6 +486,9 @@ class RoomAppRepository(
             description = description.trim(),
             content = content.trim(),
             tag = tag.trim(),
+            temperature = temperature?.trim()?.takeIf { it.isNotBlank() },
+            context = context?.trim()?.takeIf { it.isNotBlank() },
+            memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
             createdAt = now,
             updatedAt = now,
             isPrivate = isPrivate
@@ -503,14 +502,16 @@ class RoomAppRepository(
         description: String,
         content: String,
         tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
         isPrivate: Boolean
     ) {
         val existing = promptDao.getById(promptId)
             ?: throw IllegalArgumentException("Prompt not found")
 
-        // Validate all required fields
-        if (title.isBlank() || description.isBlank() || content.isBlank() || tag.isBlank()) {
-            throw IllegalArgumentException("All fields are required")
+        if (title.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("Title, content, and AI model are required")
         }
 
         val updated = existing.copy(
@@ -518,6 +519,9 @@ class RoomAppRepository(
             description = description.trim(),
             content = content.trim(),
             tag = tag.trim(),
+            temperature = temperature?.trim()?.takeIf { it.isNotBlank() },
+            context = context?.trim()?.takeIf { it.isNotBlank() },
+            memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
             updatedAt = System.currentTimeMillis(),
             isPrivate = isPrivate
         )

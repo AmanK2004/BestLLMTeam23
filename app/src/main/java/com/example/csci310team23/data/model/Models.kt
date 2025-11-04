@@ -72,6 +72,9 @@ data class Prompt(
     val description: String,
     val content: String,
     val tag: String,
+    val temperature: String? = null,
+    val context: String? = null,
+    val memoryTokens: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
     val isPrivate: Boolean = false
@@ -89,7 +92,12 @@ data class SearchState(
     val userResults: List<UserSearchResult> = emptyList(),
     val allUsers: List<UserProfile> = emptyList()
 ) {
-    fun recompute(posts: List<Post>, prompts: List<Prompt>, users: List<UserProfile>): SearchState {
+    fun recompute(
+        posts: List<Post>,
+        prompts: List<Prompt>,
+        users: List<UserProfile>,
+        currentUserId: Long? = null
+    ): SearchState {
         val refreshedPosts = if (postSearchType != null && keyword.isNotBlank()) {
             posts.filterBy(postSearchType, keyword)
         } else {
@@ -109,8 +117,10 @@ data class SearchState(
                 it.email.equals(userEmail.trim(), ignoreCase = true)
             }
             matchingUser?.let { user ->
-                val userPrompts = prompts.filter {
-                    it.author.id == user.id && !it.isPrivate
+                val userPrompts = if (user.id == currentUserId) {
+                    prompts.filter { it.author.id == user.id }
+                } else {
+                    prompts.filter { it.author.id == user.id && !it.isPrivate }
                 }
                 listOf(UserSearchResult(user.summary, userPrompts))
             } ?: emptyList()
@@ -126,6 +136,7 @@ data class SearchState(
         )
     }
 }
+
 
 fun Long.toInstant(): Instant = Instant.ofEpochMilli(this)
 
@@ -143,7 +154,8 @@ fun Instant.formatRelative(): String {
         seconds < 3600 -> "${seconds / 60}m ago"
         seconds < 86400 -> "${seconds / 3600}h ago"
         seconds < 86400 * 7 -> "${seconds / 86400}d ago"
-        else -> java.time.ZonedDateTime.ofInstant(this, ZoneOffset.systemDefault()).toLocalDate().toString()
+        else -> java.time.ZonedDateTime.ofInstant(this, ZoneOffset.systemDefault()).toLocalDate()
+            .toString()
     }
 }
 

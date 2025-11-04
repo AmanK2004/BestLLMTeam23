@@ -91,6 +91,9 @@ data class PromptEntity(
     val description: String,
     val content: String,
     val tag: String,
+    val temperature: String? = null,
+    val context: String? = null,
+    val memoryTokens: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
     val isPrivate: Boolean = false

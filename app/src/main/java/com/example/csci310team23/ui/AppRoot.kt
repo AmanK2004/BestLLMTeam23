@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -58,6 +59,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -90,7 +92,6 @@ import com.example.csci310team23.data.model.formatRelative
 import java.time.LocalDate
 import java.util.Calendar
 
-// Common AI agents list
 private val AI_AGENTS = listOf(
     "ChatGPT-4",
     "ChatGPT-3.5",
@@ -105,11 +106,32 @@ private val AI_AGENTS = listOf(
 )
 
 @Composable
+private fun BaseContentCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    OutlinedCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
 fun AppRoot(
-    viewModel: AppViewModel = viewModel(factory = AppViewModel.provideFactory(AppGraph.repository))
+    viewModel: AppViewModel = viewModel(
+        factory = AppViewModel.provideFactory(
+            AppGraph.repository,
+            AppGraph.preferencesManager
+        )
+    )
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val authState by viewModel.authState.collectAsStateWithLifecycle()
+
     val snackbarHostState = remember { SnackbarHostState() }
     val currentUser = uiState.currentUser
 
@@ -464,7 +486,7 @@ private fun MainScreen(
     viewModel: AppViewModel,
     snackbarHostState: SnackbarHostState
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf(MainSection.TRENDING) }
+    var selectedSection by rememberSaveable { mutableStateOf(MainSection.PROMPTS) }
 
     Scaffold(
         topBar = {
@@ -511,7 +533,8 @@ private fun MainScreen(
                 onWatchTag = viewModel::watchTag,
                 onWatchUser = viewModel::watchUser,
                 watchedTags = uiState.watchedTags,
-                watchedUsers = uiState.watchedUsers
+                watchedUsers = uiState.watchedUserEmails,
+                allUsers = uiState.allUsers
             )
 
             MainSection.TRENDING -> TrendingSection(
@@ -525,18 +548,38 @@ private fun MainScreen(
             MainSection.PROMPTS -> PromptSection(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
-                prompts = uiState.prompts,
-                onCreatePrompt = { title, description, content, tag, isPrivate ->
-                    viewModel.createPrompt(title, description, content, tag, isPrivate)
+                allPrompts = uiState.prompts,
+                onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                    viewModel.createPrompt(
+                        title,
+                        description,
+                        content,
+                        tag,
+                        temperature,
+                        context,
+                        memoryTokens,
+                        isPrivate
+                    )
                 },
-                onUpdatePrompt = { id, title, description, content, tag, isPrivate ->
-                    viewModel.updatePrompt(id, title, description, content, tag, isPrivate)
+                onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                    viewModel.updatePrompt(
+                        id,
+                        title,
+                        description,
+                        content,
+                        tag,
+                        temperature,
+                        context,
+                        memoryTokens,
+                        isPrivate
+                    )
                 },
                 onDeletePrompt = viewModel::deletePrompt
             )
 
             MainSection.SEARCH -> SearchSection(
                 modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
                 posts = uiState.searchState.postResults,
                 prompts = uiState.searchState.promptResults,
                 users = uiState.searchState.userResults,
@@ -570,9 +613,10 @@ private fun FeedSection(
     onVotePost: (Long, Int) -> Unit,
     onVoteComment: (Long, Int) -> Unit,
     onWatchTag: (String) -> Unit,
-    onWatchUser: (Long) -> Unit,
+    onWatchUser: (String) -> Unit,
     watchedTags: Set<String>,
-    watchedUsers: Set<Long>
+    watchedUsers: Set<String>,
+    allUsers: List<UserProfile>
 ) {
     var showCreatePost by rememberSaveable { mutableStateOf(false) }
     var showWatchDialog by remember { mutableStateOf(false) }
@@ -583,7 +627,12 @@ private fun FeedSection(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -647,15 +696,16 @@ private fun FeedSection(
             PostCard(
                 post = post,
                 currentUser = currentUser,
-                onUpdatePost = onUpdatePost,
-                onDeletePost = onDeletePost,
-                onPublishDraft = onPublishDraft,
-                onCreateComment = onCreateComment,
-                onUpdateComment = onUpdateComment,
+                onUpdatePost = { _, _, _, _ -> }, // Provide empty implementation
+                onDeletePost = { _ -> }, // Provide empty implementation
+                onPublishDraft = { _ -> }, // Provide empty implementation
+                onCreateComment = { _, _, _ -> }, // Provide empty implementation
+                onUpdateComment = { _, _, _ -> }, // Provide empty implementation
                 onVotePost = onVotePost,
                 onVoteComment = onVoteComment,
                 enableCommentComposer = true,
                 showVoting = post.isPublished
+                // Remove viewModel parameter
             )
         }
         if (posts.isEmpty()) {
@@ -663,7 +713,7 @@ private fun FeedSection(
                 Text(
                     text = "No posts yet. Create your first post or watch tags/users to see content!",
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 32.dp)
+                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
         }
@@ -673,6 +723,7 @@ private fun FeedSection(
         WatchDialog(
             watchedTags = watchedTags,
             watchedUsers = watchedUsers,
+            allUsers = allUsers,
             onWatchTag = onWatchTag,
             onWatchUser = onWatchUser,
             onDismiss = { showWatchDialog = false }
@@ -680,16 +731,19 @@ private fun FeedSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WatchDialog(
     watchedTags: Set<String>,
-    watchedUsers: Set<Long>,
+    watchedUsers: Set<String>,
+    allUsers: List<UserProfile>,
     onWatchTag: (String) -> Unit,
-    onWatchUser: (Long) -> Unit,
+    onWatchUser: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var tagInput by remember { mutableStateOf("") }
-    var userIdInput by remember { mutableStateOf("") }
+    var tagExpanded by remember { mutableStateOf(false) }
+    var selectedTag by remember { mutableStateOf("") }
+    var userEmail by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -699,26 +753,43 @@ private fun WatchDialog(
         title = { Text("Manage Watched Content") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("Watch Tags", fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Watch AI Models", fontWeight = FontWeight.SemiBold)
+
+                ExposedDropdownMenuBox(
+                    expanded = tagExpanded,
+                    onExpandedChange = { tagExpanded = !tagExpanded }
+                ) {
                     OutlinedTextField(
-                        value = tagInput,
-                        onValueChange = { tagInput = it },
-                        label = { Text("Tag name") },
-                        modifier = Modifier.weight(1f)
+                        value = selectedTag,
+                        onValueChange = { selectedTag = it },
+                        label = { Text("Select AI Model") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        readOnly = true
                     )
-                    Button(onClick = {
-                        if (tagInput.isNotBlank()) {
-                            onWatchTag(tagInput.trim())
-                            tagInput = ""
+                    ExposedDropdownMenu(
+                        expanded = tagExpanded,
+                        onDismissRequest = { tagExpanded = false }
+                    ) {
+                        AI_AGENTS.forEach { agent ->
+                            DropdownMenuItem(
+                                text = { Text(agent) },
+                                onClick = {
+                                    onWatchTag(agent)
+                                    selectedTag = ""
+                                    tagExpanded = false
+                                }
+                            )
                         }
-                    }) {
-                        Text("+")
                     }
                 }
+
                 watchedTags.forEach { tag ->
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text("#$tag")
@@ -727,30 +798,38 @@ private fun WatchDialog(
                 }
 
                 Spacer(Modifier.size(8.dp))
-                Text("Watch Users (by ID)", fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Watch Users (by Email)", fontWeight = FontWeight.SemiBold)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     OutlinedTextField(
-                        value = userIdInput,
-                        onValueChange = { userIdInput = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("User ID") },
+                        value = userEmail,
+                        onValueChange = { userEmail = it },
+                        label = { Text("USC Email") },
                         modifier = Modifier.weight(1f)
                     )
-                    Button(onClick = {
-                        userIdInput.toLongOrNull()?.let { id ->
-                            onWatchUser(id)
-                            userIdInput = ""
-                        }
-                    }) {
+                    Button(
+                        onClick = {
+                            if (userEmail.isNotBlank()) {
+                                onWatchUser(userEmail.trim())
+                                userEmail = ""
+                            }
+                        },
+                        modifier = Modifier.padding(top = 5.dp)
+                    ) {
                         Text("+")
                     }
                 }
-                watchedUsers.forEach { userId ->
+                watchedUsers.forEach { email ->
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("User #$userId")
-                        TextButton(onClick = { onWatchUser(userId) }) { Text("Remove") }
+                        Text(email)
+                        TextButton(onClick = { onWatchUser(email) }) { Text("Remove") }
                     }
                 }
             }
@@ -772,10 +851,15 @@ private fun TrendingSection(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "🔥 Trending",
+                        text = "Trending",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -793,23 +877,25 @@ private fun TrendingSection(
             PostCard(
                 post = post,
                 currentUser = currentUser,
-                onUpdatePost = { _, _, _, _ -> },
-                onDeletePost = { },
-                onPublishDraft = { },
-                onCreateComment = { _, _, _ -> },
-                onUpdateComment = { _, _, _ -> },
+                onUpdatePost = { _, _, _, _ -> }, // Provide empty implementation
+                onDeletePost = { _ -> }, // Provide empty implementation
+                onPublishDraft = { _ -> }, // Provide empty implementation
+                onCreateComment = { _, _, _ -> }, // Provide empty implementation
+                onUpdateComment = { _, _, _ -> }, // Provide empty implementation
                 onVotePost = onVotePost,
                 onVoteComment = onVoteComment,
                 enableCommentComposer = false,
                 showVoting = true
+                // Remove viewModel parameter
             )
         }
+
         if (posts.isEmpty()) {
             item {
                 Text(
                     text = "No trending posts yet. Be the first to share!",
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 32.dp)
+                    modifier = Modifier.padding(top = 16.dp)
                 )
             }
         }
@@ -820,12 +906,16 @@ private fun TrendingSection(
 private fun PromptSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
-    prompts: List<Prompt>,
-    onCreatePrompt: (String, String, String, String, Boolean) -> Unit,
-    onUpdatePrompt: (Long, String, String, String, String, Boolean) -> Unit,
+    allPrompts: List<Prompt>,
+    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
     onDeletePrompt: (Long) -> Unit
 ) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showCreatePrompt by rememberSaveable { mutableStateOf(false) }
+
+    val myPrompts = allPrompts.filter { it.author.id == currentUser?.id }
+    val publicPrompts = allPrompts.filter { !it.isPrivate }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -833,70 +923,122 @@ private fun PromptSection(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "📝 LLM Prompts",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Curated prompts for various AI models - share or save privately",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "LLM Prompts",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 0.dp)
+                )
 
-                    Button(
-                        onClick = { showCreatePrompt = !showCreatePrompt },
-                        modifier = Modifier.fillMaxWidth()
+                TabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("My Prompts") }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Community") }
+                    )
+                }
+            }
+        }
+
+        when (selectedTab) {
+            0 -> {
+                item {
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "Your personal prompt library",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Button(
+                                onClick = { showCreatePrompt = !showCreatePrompt },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    if (showCreatePrompt) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.size(8.dp))
+                                Text(if (showCreatePrompt) "Hide" else "Create New Prompt")
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedVisibility(
+                        visible = showCreatePrompt,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
                     ) {
-                        Icon(
-                            if (showCreatePrompt) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                        if (currentUser != null) {
+                            CreatePromptCard(
+                                onCreatePrompt = { title, description, content, tag, temp, ctx, mem, isPrivate ->
+                                    onCreatePrompt(
+                                        title,
+                                        description,
+                                        content,
+                                        tag,
+                                        temp,
+                                        ctx,
+                                        mem,
+                                        isPrivate
+                                    )
+                                    showCreatePrompt = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                items(myPrompts, key = { it.id }) { prompt ->
+                    PromptCard(
+                        prompt = prompt,
+                        canEdit = true,
+                        onUpdatePrompt = onUpdatePrompt,
+                        onDeletePrompt = onDeletePrompt
+                    )
+                }
+                if (myPrompts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "You haven't created any prompts yet. Start building your library!",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp)
                         )
-                        Spacer(Modifier.size(8.dp))
-                        Text(if (showCreatePrompt) "Hide" else "Create New Prompt")
                     }
                 }
             }
-        }
 
-        item {
-            AnimatedVisibility(
-                visible = showCreatePrompt,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                if (currentUser != null) {
-                    CreatePromptCard(
-                        onCreatePrompt = { title, description, content, tag, isPrivate ->
-                            onCreatePrompt(title, description, content, tag, isPrivate)
-                            showCreatePrompt = false
-                        }
+            1 -> {
+                items(publicPrompts, key = { it.id }) { prompt ->
+                    PromptCard(
+                        prompt = prompt,
+                        canEdit = currentUser?.id == prompt.author.id,
+                        onUpdatePrompt = onUpdatePrompt,
+                        onDeletePrompt = onDeletePrompt
                     )
                 }
-            }
-        }
-
-        items(prompts, key = { it.id }) { prompt ->
-            PromptCard(
-                prompt = prompt,
-                canEdit = currentUser?.id == prompt.author.id,
-                onUpdatePrompt = onUpdatePrompt,
-                onDeletePrompt = onDeletePrompt
-            )
-        }
-        if (prompts.isEmpty()) {
-            item {
-                Text(
-                    text = "No prompts shared yet. Create your first prompt!",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 32.dp)
-                )
+                if (publicPrompts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No public prompts shared yet. Be the first!",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -906,6 +1048,7 @@ private fun PromptSection(
 @Composable
 private fun SearchSection(
     modifier: Modifier = Modifier,
+    currentUser: UserProfile?,
     posts: List<Post>,
     prompts: List<Prompt>,
     users: List<UserSearchResult>,
@@ -916,7 +1059,9 @@ private fun SearchSection(
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var selectedType by rememberSaveable { mutableStateOf(PostSearchType.TAG) }
     var keyword by rememberSaveable { mutableStateOf("") }
+    var tagExpanded by remember { mutableStateOf(false) }
     var promptTag by rememberSaveable { mutableStateOf("") }
+    var promptTagExpanded by remember { mutableStateOf(false) }
     var userEmail by rememberSaveable { mutableStateOf("") }
     var postSearched by rememberSaveable { mutableStateOf(false) }
     var promptSearched by rememberSaveable { mutableStateOf(false) }
@@ -929,22 +1074,31 @@ private fun SearchSection(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Posts") }
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Search",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 0.dp)
                 )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Prompts") }
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("Users") }
-                )
+
+                TabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Posts") }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Prompts") }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = { Text("Users") }
+                    )
+                }
             }
         }
 
@@ -964,12 +1118,50 @@ private fun SearchSection(
                                 )
                             }
                         }
-                        OutlinedTextField(
-                            value = keyword,
-                            onValueChange = { keyword = it },
-                            label = { Text("Search keyword") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+
+                        if (selectedType == PostSearchType.TAG) {
+                            ExposedDropdownMenuBox(
+                                expanded = tagExpanded,
+                                onExpandedChange = { tagExpanded = !tagExpanded }
+                            ) {
+                                OutlinedTextField(
+                                    value = keyword,
+                                    onValueChange = { keyword = it },
+                                    label = { Text("AI Model") },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = tagExpanded
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .menuAnchor(),
+                                    readOnly = false
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = tagExpanded,
+                                    onDismissRequest = { tagExpanded = false }
+                                ) {
+                                    AI_AGENTS.forEach { agent ->
+                                        DropdownMenuItem(
+                                            text = { Text(agent) },
+                                            onClick = {
+                                                keyword = agent
+                                                tagExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            OutlinedTextField(
+                                value = keyword,
+                                onValueChange = { keyword = it },
+                                label = { Text("Search keyword") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
                         Button(
                             onClick = {
                                 postSearched = true
@@ -988,8 +1180,8 @@ private fun SearchSection(
                 if (posts.isEmpty()) {
                     item {
                         Text(
-                            text = if (postSearched) "No results found." else "Enter a keyword to search posts.",
-                            modifier = Modifier.padding(vertical = 16.dp)
+                            text = if (postSearched) "No results found." else "",
+                            modifier = Modifier.padding(top = 16.dp)
                         )
                     }
                 }
@@ -998,12 +1190,40 @@ private fun SearchSection(
             1 -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
-                            value = promptTag,
-                            onValueChange = { promptTag = it },
-                            label = { Text("AI Model") },
-                            modifier = Modifier.fillMaxWidth()
+                        Text(
+                            text = "Select an AI model to search prompts",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        ExposedDropdownMenuBox(
+                            expanded = promptTagExpanded,
+                            onExpandedChange = { promptTagExpanded = !promptTagExpanded }
+                        ) {
+                            OutlinedTextField(
+                                value = promptTag,
+                                onValueChange = { promptTag = it },
+                                label = { Text("AI Model") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = promptTagExpanded) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                                readOnly = false
+                            )
+                            ExposedDropdownMenu(
+                                expanded = promptTagExpanded,
+                                onDismissRequest = { promptTagExpanded = false }
+                            ) {
+                                AI_AGENTS.forEach { agent ->
+                                    DropdownMenuItem(
+                                        text = { Text(agent) },
+                                        onClick = {
+                                            promptTag = agent
+                                            promptTagExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                         Button(
                             onClick = {
                                 promptSearched = true
@@ -1017,13 +1237,16 @@ private fun SearchSection(
                 }
 
                 items(prompts, key = { it.id }) { prompt ->
-                    PromptSummaryCard(prompt)
+                    PromptSearchCard(
+                        prompt = prompt,
+                        isOwnPrompt = currentUser?.id == prompt.author.id
+                    )
                 }
                 if (prompts.isEmpty()) {
                     item {
                         Text(
-                            text = if (promptSearched) "No results found." else "Enter an AI model to search prompts.",
-                            modifier = Modifier.padding(vertical = 16.dp)
+                            text = if (promptSearched) "No results found." else "",
+                            modifier = Modifier.padding(top = 16.dp)
                         )
                     }
                 }
@@ -1056,13 +1279,16 @@ private fun SearchSection(
                 }
 
                 items(users) { userResult ->
-                    UserSearchCard(userResult)
+                    UserSearchCard(
+                        userResult = userResult,
+                        isOwnProfile = currentUser?.id == userResult.user.id
+                    )
                 }
                 if (users.isEmpty()) {
                     item {
                         Text(
-                            text = if (userSearched) "No users found." else "Enter a USC email to find users.",
-                            modifier = Modifier.padding(vertical = 16.dp)
+                            text = if (userSearched) "No users found." else "",
+                            modifier = Modifier.padding(top = 16.dp)
                         )
                     }
                 }
@@ -1077,7 +1303,8 @@ private fun ProfileSection(
     user: UserProfile,
     onUpdateProfile: (LocalDate?, String) -> Unit,
     onResetPassword: (String) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: AppViewModel = viewModel()
 ) {
     var birthDate by rememberSaveable { mutableStateOf(user.birthDate) }
     var bio by rememberSaveable { mutableStateOf(user.bio) }
@@ -1086,7 +1313,12 @@ private fun ProfileSection(
     var message by remember { mutableStateOf<String?>(null) }
     var showEditProfile by rememberSaveable { mutableStateOf(false) }
     var showEditPassword by rememberSaveable { mutableStateOf(false) }
+    var showDisplaySettings by rememberSaveable { mutableStateOf(false) }
     var showChangeEmail by rememberSaveable { mutableStateOf(false) }
+    var showCommentTitles by remember {
+        mutableStateOf(viewModel.getShowCommentTitles())
+    }
+
 
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
@@ -1183,6 +1415,57 @@ private fun ProfileSection(
                             ) {
                                 Text("Save Changes")
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Display Settings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        IconButton(onClick = { showDisplaySettings = !showDisplaySettings }) {
+                            Icon(
+                                if (showDisplaySettings) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = showDisplaySettings) {
+                        Column(
+                            modifier = Modifier.padding(top = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Show Comment Titles")
+                                Switch(
+                                    checked = showCommentTitles,
+                                    onCheckedChange = { newValue ->
+                                        showCommentTitles = newValue
+                                        viewModel.setShowCommentTitles(newValue)
+                                    }
+                                )
+                            }
+                            Text(
+                                text = "When enabled, comment titles will be displayed above comment text",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -1340,7 +1623,7 @@ private fun CreatePostCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "💬 Create Post",
+                text = "Create Post",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -1451,165 +1734,212 @@ private fun PostCard(
     var showEditPost by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showCommentComposer by rememberSaveable(post.id) { mutableStateOf(false) }
     var editPostTitle by remember { mutableStateOf(post.title) }
     var editPostTag by remember { mutableStateOf(post.tag) }
     var editPostBody by remember { mutableStateOf(post.body) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    BaseContentCard {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = post.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (!post.isPublished) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = "DRAFT",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = "${post.author.name} • ${post.createdAt.formatRelative()}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        if (post.isEdited) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = post.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (!post.isPublished) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
                             Text(
-                                text = "(edited)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = "DRAFT",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                         }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+                Spacer(modifier = Modifier.size(4.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${post.author.name} • ${post.createdAt.formatRelative()}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (post.isEdited) {
+                        Text(
+                            text = "(edited)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                if (currentUser?.id == post.author.id) {
                     Text(
                         text = "#${post.tag}",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(end = 8.dp)
+                        style = MaterialTheme.typography.labelLarge
                     )
-                    if (currentUser?.id == post.author.id) {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Options")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Edit") },
-                                onClick = {
-                                    editPostTitle = post.title
-                                    editPostTag = post.tag
-                                    editPostBody = post.body
-                                    showEditPost = true
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                            )
-                            if (!post.isPublished) {
-                                DropdownMenuItem(
-                                    text = { Text("Publish") },
-                                    onClick = {
-                                        onPublishDraft(post.id)
-                                        showMenu = false
-                                    },
-                                    leadingIcon = { Icon(Icons.Filled.Publish, contentDescription = null) }
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                onClick = {
-                                    showDeleteDialog = true
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                            )
-                        }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Options",
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            onClick = {
+                                editPostTitle = post.title
+                                editPostTag = post.tag
+                                editPostBody = post.body
+                                showEditPost = true
+                                showMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                        )
+                        if (!post.isPublished) {
+                            DropdownMenuItem(
+                                text = { Text("Publish") },
+                                onClick = {
+                                    onPublishDraft(post.id)
+                                    showMenu = false
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Publish,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            onClick = {
+                                showDeleteDialog = true
+                                showMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "#${post.tag}",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             }
+        }
 
+        Text(
+            text = post.body,
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        if (showVoting) {
+            VoteRow(
+                score = post.voteSummary.score,
+                currentVote = post.currentUserVote,
+                onUpvote = {
+                    val newValue: Int = if (post.currentUserVote == 1) 0 else 1
+                    onVotePost(post.id, newValue)
+                },
+                onDownvote = {
+                    val newValue: Int = if (post.currentUserVote == -1) 0 else -1
+                    onVotePost(post.id, newValue)
+                }
+            )
+        }
+
+        if (post.comments.isNotEmpty() && post.isPublished) {
+            Spacer(modifier = Modifier.size(8.dp))
             Text(
-                text = post.body,
-                style = MaterialTheme.typography.bodyMedium
+                text = "Comments (${post.comments.size})",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
             )
 
-            if (showVoting) {
-                VoteRow(
-                    score = post.voteSummary.score,
-                    currentVote = post.currentUserVote,
-                    onUpvote = {
-                        val newValue = if (post.currentUserVote == 1) 0 else 1
-                        onVotePost(post.id, newValue)
-                    },
-                    onDownvote = {
-                        val newValue = if (post.currentUserVote == -1) 0 else -1
-                        onVotePost(post.id, newValue)
-                    }
+            post.comments.forEach { comment ->
+                CommentCard(
+                    comment = comment,
+                    currentUser = currentUser,
+                    onUpdateComment = onUpdateComment,
+                    onVoteComment = onVoteComment
                 )
             }
+        }
 
-            if (post.comments.isNotEmpty() && post.isPublished) {
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = "Comments (${post.comments.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+        if (enableCommentComposer && currentUser != null && post.isPublished) {
+            Spacer(modifier = Modifier.size(8.dp))
+            Button(
+                onClick = { showCommentComposer = !showCommentComposer },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (showCommentComposer) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
+                Spacer(Modifier.size(8.dp))
+                Text(if (showCommentComposer) "Hide" else "Add Comment")
+            }
 
-                post.comments.forEach { comment ->
-                    CommentCard(
-                        comment = comment,
-                        currentUser = currentUser,
-                        onUpdateComment = onUpdateComment,
-                        onVoteComment = onVoteComment
+            AnimatedVisibility(visible = showCommentComposer) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = commentTitle,
+                        onValueChange = { commentTitle = it },
+                        label = { Text("Comment Title (optional)") },
+                        modifier = Modifier.fillMaxWidth()
                     )
-                }
-            }
-
-            if (enableCommentComposer && currentUser != null && post.isPublished) {
-                Spacer(modifier = Modifier.size(8.dp))
-                OutlinedTextField(
-                    value = commentTitle,
-                    onValueChange = { commentTitle = it },
-                    label = { Text("Comment Title (optional)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = commentBody,
-                    onValueChange = { commentBody = it },
-                    label = { Text("Add a comment") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 80.dp)
-                )
-                Button(onClick = {
-                    if (commentBody.isBlank()) return@Button
-                    onCreateComment(post.id, commentTitle.takeIf { it.isNotBlank() }?.trim(), commentBody.trim())
-                    commentTitle = ""
-                    commentBody = ""
-                }) {
-                    Text("Post Comment")
+                    OutlinedTextField(
+                        value = commentBody,
+                        onValueChange = { commentBody = it },
+                        label = { Text("Add a comment") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 80.dp)
+                    )
+                    Button(onClick = {
+                        if (commentBody.isBlank()) return@Button
+                        onCreateComment(
+                            post.id,
+                            commentTitle.takeIf { it.isNotBlank() }?.trim(),
+                            commentBody.trim()
+                        )
+                        commentTitle = ""
+                        commentBody = ""
+                        showCommentComposer = false
+                    }) {
+                        Text("Post Comment")
+                    }
                 }
             }
         }
@@ -1747,58 +2077,96 @@ private fun CommentCard(
     currentUser: UserProfile?,
     onUpdateComment: (Long, String?, String) -> Unit,
     onVoteComment: (Long, Int) -> Unit
+    // Remove viewModel parameter
 ) {
+    // Get viewModel inside the composable
+    val viewModel: AppViewModel = viewModel()
+
     var showEdit by remember { mutableStateOf(false) }
-    var editTitle by remember { mutableStateOf(comment.title.orEmpty()) }
+    var showMenu by remember { mutableStateOf(false) }
+    var editTitle by remember { mutableStateOf(comment.title ?: "") }
     var editBody by remember { mutableStateOf(comment.body) }
+
+    // Get the setting from ViewModel
+    val showCommentTitle = viewModel.getShowCommentTitles()
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = comment.title ?: "Comment",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "${comment.author.name} • ${comment.createdAt.formatRelative()}",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                if (comment.isEdited) {
-                    Text(
-                        text = "(edited)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    // Conditionally show the comment title
+                    if (showCommentTitle) {
+                        Text(
+                            text = comment.title ?: "Comment",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "${comment.author.name} • ${comment.createdAt.formatRelative()}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (comment.isEdited) {
+                            Text(
+                                text = "(edited)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+                }
+
+                // Menu button for comment options
+                if (currentUser?.id == comment.author.id) {
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Options",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            onClick = {
+                                editTitle = comment.title ?: ""
+                                editBody = comment.body
+                                showEdit = true
+                                showMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                        )
+                    }
                 }
             }
-            Text(comment.body)
+
+            Text(text = comment.body, style = MaterialTheme.typography.bodyMedium)
             VoteRow(
                 score = comment.voteSummary.score,
                 currentVote = comment.currentUserVote,
                 onUpvote = {
-                    val newValue = if (comment.currentUserVote == 1) 0 else 1
+                    val newValue: Int = if (comment.currentUserVote == 1) 0 else 1
                     onVoteComment(comment.id, newValue)
                 },
                 onDownvote = {
-                    val newValue = if (comment.currentUserVote == -1) 0 else -1
+                    val newValue: Int = if (comment.currentUserVote == -1) 0 else -1
                     onVoteComment(comment.id, newValue)
                 }
             )
-            if (currentUser?.id == comment.author.id) {
-                TextButton(onClick = {
-                    editTitle = comment.title.orEmpty()
-                    editBody = comment.body
-                    showEdit = true
-                }) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(4.dp))
-                    Text("Edit")
-                }
-            }
         }
     }
 
@@ -1807,25 +2175,31 @@ private fun CommentCard(
             onDismissRequest = { showEdit = false },
             confirmButton = {
                 TextButton(onClick = {
-                    onUpdateComment(comment.id, editTitle.takeIf { it.isNotBlank() }?.trim(), editBody.trim())
+                    val titleToSave: String? =
+                        if (editTitle.isNotBlank()) editTitle.trim() else null
+                    onUpdateComment(comment.id, titleToSave, editBody.trim())
                     showEdit = false
-                }) { Text("Save") }
+                }) {
+                    Text("Save")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showEdit = false }) { Text("Cancel") }
+                TextButton(onClick = { showEdit = false }) {
+                    Text("Cancel")
+                }
             },
             title = { Text("Edit Comment") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = editTitle,
-                        onValueChange = { editTitle = it },
+                        onValueChange = { newValue: String -> editTitle = newValue },
                         label = { Text("Title (optional)") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = editBody,
-                        onValueChange = { editBody = it },
+                        onValueChange = { newValue: String -> editBody = newValue },
                         label = { Text("Comment") },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1845,21 +2219,24 @@ private fun VoteRow(
     onDownvote: () -> Unit
 ) {
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onUpvote) {
+        IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
             Icon(
                 imageVector = Icons.Filled.ThumbUp,
                 contentDescription = "Upvote",
+                modifier = Modifier.size(18.dp),
                 tint = if (currentVote == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
         }
-        Text(score.toString(), style = MaterialTheme.typography.titleMedium)
-        IconButton(onClick = onDownvote) {
+        Text(score.toString(), style = MaterialTheme.typography.bodyMedium)
+        IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
             Icon(
                 imageVector = Icons.Filled.ThumbDown,
                 contentDescription = "Downvote",
+                modifier = Modifier.size(18.dp),
                 tint = if (currentVote == -1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
             )
         }
@@ -1869,13 +2246,17 @@ private fun VoteRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreatePromptCard(
-    onCreatePrompt: (String, String, String, String, Boolean) -> Unit
+    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean) -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
     var tag by rememberSaveable { mutableStateOf("") }
+    var temperature by rememberSaveable { mutableStateOf("") }
+    var context by rememberSaveable { mutableStateOf("") }
+    var memoryTokens by rememberSaveable { mutableStateOf("") }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var showOptional by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tagExpanded by remember { mutableStateOf(false) }
 
@@ -1885,7 +2266,7 @@ private fun CreatePromptCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "✨ Create Prompt",
+                text = "Create Prompt",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -1944,6 +2325,45 @@ private fun CreatePromptCard(
                 }
             }
 
+            OutlinedButton(
+                onClick = { showOptional = !showOptional },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (showOptional) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(if (showOptional) "Hide Optional Fields" else "Show Optional Fields")
+            }
+
+            AnimatedVisibility(visible = showOptional) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = temperature,
+                        onValueChange = { temperature = it },
+                        label = { Text("Temperature (e.g., 0.7)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = context,
+                        onValueChange = { context = it },
+                        label = { Text("Context") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3
+                    )
+                    OutlinedTextField(
+                        value = memoryTokens,
+                        onValueChange = { memoryTokens = it },
+                        label = { Text("Memory Tokens") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1971,7 +2391,16 @@ private fun CreatePromptCard(
                         tag.isBlank() -> error = "AI Model is required"
                         else -> {
                             error = null
-                            onCreatePrompt(title.trim(), description.trim(), content.trim(), tag.trim(), isPrivate)
+                            onCreatePrompt(
+                                title.trim(),
+                                description.trim(),
+                                content.trim(),
+                                tag.trim(),
+                                temperature.takeIf { it.isNotBlank() }?.trim(),
+                                context.takeIf { it.isNotBlank() }?.trim(),
+                                memoryTokens.takeIf { it.isNotBlank() }?.trim(),
+                                isPrivate
+                            )
                         }
                     }
                 },
@@ -1983,133 +2412,170 @@ private fun CreatePromptCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PromptCard(
     prompt: Prompt,
     canEdit: Boolean,
-    onUpdatePrompt: (Long, String, String, String, String, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
     onDeletePrompt: (Long) -> Unit
 ) {
     var showEdit by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
-    var editTitle by remember { mutableStateOf(prompt.title) }
-    var editDescription by remember { mutableStateOf(prompt.description) }
-    var editContent by remember { mutableStateOf(prompt.content) }
-    var editTag by remember { mutableStateOf(prompt.tag) }
-    var editIsPrivate by remember { mutableStateOf(prompt.isPrivate) }
+    var showOptional by rememberSaveable(prompt.id) { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
+            !prompt.context.isNullOrBlank() ||
+            !prompt.memoryTokens.isNullOrBlank()
+    println("DEBUG: temp='${prompt.temperature}' ctx='${prompt.context}' mem='${prompt.memoryTokens}' hasOpt=$hasOptionalFields")
+
+
+    BaseContentCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
         ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = prompt.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (prompt.isPrivate) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small
+                        ) {
+                            Text(
+                                text = "PRIVATE",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.size(4.dp))
+
+                Text(
+                    text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = "#${prompt.tag}",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                if (canEdit) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = { showMenu = true },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Options",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            onClick = {
+                                showEdit = true
+                                showMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            onClick = {
+                                showDeleteDialog = true
+                                showMenu = false
+                            },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(28.dp))
+                }
+            }
+        }
+
+        if (prompt.description.isNotBlank()) {
+            Text(
+                text = prompt.description,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Text(
+            text = prompt.content,
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        if (hasOptionalFields) {
+            OutlinedButton(
+                onClick = { showOptional = !showOptional },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = prompt.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        if (prompt.isPrivate) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                shape = MaterialTheme.shapes.small
-                            ) {
-                                Text(
-                                    text = "PRIVATE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-                        }
+                Icon(
+                    if (showOptional) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(if (showOptional) "Hide Details" else "Show Details")
+            }
+
+            AnimatedVisibility(visible = showOptional) {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    prompt.temperature?.let {
+                        Text("Temperature: $it", style = MaterialTheme.typography.bodySmall)
                     }
-                    Text(
-                        text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "#${prompt.tag}",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    if (canEdit) {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Options")
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Edit") },
-                                onClick = {
-                                    editTitle = prompt.title
-                                    editDescription = prompt.description
-                                    editContent = prompt.content
-                                    editTag = prompt.tag
-                                    editIsPrivate = prompt.isPrivate
-                                    showEdit = true
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delete") },
-                                onClick = {
-                                    showDeleteDialog = true
-                                    showMenu = false
-                                },
-                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                            )
-                        }
+                    prompt.context?.let {
+                        Text("Context: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    prompt.memoryTokens?.let {
+                        Text("Memory Tokens: $it", style = MaterialTheme.typography.bodySmall)
                     }
                 }
-            }
-            if (prompt.description.isNotBlank()) {
-                Text(
-                    text = prompt.description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text(
-                    text = prompt.content,
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodyMedium
-                )
             }
         }
     }
 
     if (showEdit) {
         EditPromptDialog(
-            title = editTitle,
-            description = editDescription,
-            content = editContent,
-            tag = editTag,
-            isPrivate = editIsPrivate,
-            onTitleChange = { editTitle = it },
-            onDescriptionChange = { editDescription = it },
-            onContentChange = { editContent = it },
-            onTagChange = { editTag = it },
-            onPrivateChange = { editIsPrivate = it },
-            onSave = {
-                onUpdatePrompt(prompt.id, editTitle.trim(), editDescription.trim(), editContent.trim(), editTag.trim(), editIsPrivate)
+            prompt = prompt,
+            onSave = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                onUpdatePrompt(
+                    prompt.id,
+                    title,
+                    description,
+                    content,
+                    tag,
+                    temperature,
+                    context,
+                    memoryTokens,
+                    isPrivate
+                )
                 showEdit = false
             },
             onDismiss = { showEdit = false }
@@ -2139,21 +2605,21 @@ private fun PromptCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditPromptDialog(
-    title: String,
-    description: String,
-    content: String,
-    tag: String,
-    isPrivate: Boolean,
-    onTitleChange: (String) -> Unit,
-    onDescriptionChange: (String) -> Unit,
-    onContentChange: (String) -> Unit,
-    onTagChange: (String) -> Unit,
-    onPrivateChange: (Boolean) -> Unit,
-    onSave: () -> Unit,
+    prompt: Prompt,
+    onSave: (String, String, String, String, String?, String?, String?, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var tagExpanded by remember { mutableStateOf(false) }
+    var title by remember { mutableStateOf(prompt.title) }
+    var description by remember { mutableStateOf(prompt.description) }
+    var content by remember { mutableStateOf(prompt.content) }
+    var tag by remember { mutableStateOf(prompt.tag) }
+    var temperature by remember { mutableStateOf(prompt.temperature ?: "") }
+    var context by remember { mutableStateOf(prompt.context ?: "") }
+    var memoryTokens by remember { mutableStateOf(prompt.memoryTokens ?: "") }
+    var isPrivate by remember { mutableStateOf(prompt.isPrivate) }
+    var showOptional by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var tagExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2165,7 +2631,16 @@ private fun EditPromptDialog(
                     tag.isBlank() -> error = "AI Model is required"
                     else -> {
                         error = null
-                        onSave()
+                        onSave(
+                            title.trim(),
+                            description.trim(),
+                            content.trim(),
+                            tag.trim(),
+                            temperature.takeIf { it.isNotBlank() }?.trim(),
+                            context.takeIf { it.isNotBlank() }?.trim(),
+                            memoryTokens.takeIf { it.isNotBlank() }?.trim(),
+                            isPrivate
+                        )
                     }
                 }
             }) { Text("Save") }
@@ -2175,71 +2650,124 @@ private fun EditPromptDialog(
         },
         title = { Text("Edit Prompt") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = onDescriptionChange,
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = onContentChange,
-                    label = { Text("Prompt Text") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 160.dp)
-                )
-                ExposedDropdownMenuBox(
-                    expanded = tagExpanded,
-                    onExpandedChange = { tagExpanded = !tagExpanded }
-                ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.heightIn(max = 500.dp)
+            ) {
+                item {
                     OutlinedTextField(
-                        value = tag,
-                        onValueChange = onTagChange,
-                        label = { Text("AI Model") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        label = { Text("Prompt Text") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor()
+                            .heightIn(min = 120.dp)
                     )
-                    ExposedDropdownMenu(
+                }
+                item {
+                    ExposedDropdownMenuBox(
                         expanded = tagExpanded,
-                        onDismissRequest = { tagExpanded = false }
+                        onExpandedChange = { tagExpanded = !tagExpanded }
                     ) {
-                        AI_AGENTS.forEach { agent ->
-                            DropdownMenuItem(
-                                text = { Text(agent) },
-                                onClick = {
-                                    onTagChange(agent)
-                                    tagExpanded = false
-                                }
-                            )
+                        OutlinedTextField(
+                            value = tag,
+                            onValueChange = { tag = it },
+                            label = { Text("AI Model") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = tagExpanded,
+                            onDismissRequest = { tagExpanded = false }
+                        ) {
+                            AI_AGENTS.forEach { agent ->
+                                DropdownMenuItem(
+                                    text = { Text(agent) },
+                                    onClick = {
+                                        tag = agent
+                                        tagExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Checkbox(
-                        checked = isPrivate,
-                        onCheckedChange = onPrivateChange
-                    )
-                    Text("Keep Private")
+
+                item {
+                    TextButton(
+                        onClick = { showOptional = !showOptional },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showOptional) "Hide Optional Fields" else "Show Optional Fields")
+                    }
                 }
+
+                if (showOptional) {
+                    item {
+                        OutlinedTextField(
+                            value = temperature,
+                            onValueChange = { temperature = it },
+                            label = { Text("Temperature (optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = context,
+                            onValueChange = { context = it },
+                            label = { Text("Context (optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = memoryTokens,
+                            onValueChange = { memoryTokens = it },
+                            label = { Text("Memory Tokens (optional)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = isPrivate,
+                            onCheckedChange = { isPrivate = it }
+                        )
+                        Text("Keep Private")
+                    }
+                }
+
                 error?.let {
-                    Text(
-                        text = it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    item {
+                        Text(
+                            text = it,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }
@@ -2247,117 +2775,232 @@ private fun EditPromptDialog(
 }
 
 @Composable
-private fun PostSummaryCard(post: Post) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = post.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${post.author.name} • ${post.createdAt.formatRelative()} • #${post.tag}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            Text(
-                text = post.body,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text("Score: ${post.voteSummary.score} • ${post.commentCount} comments")
-        }
-    }
-}
+private fun PromptSearchCard(
+    prompt: Prompt,
+    isOwnPrompt: Boolean
+) {
+    var showOptional by rememberSaveable(prompt.id) { mutableStateOf(false) }
+    val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
+            !prompt.context.isNullOrBlank() ||
+            !prompt.memoryTokens.isNullOrBlank()
+    println("DEBUG: temp='${prompt.temperature}' ctx='${prompt.context}' mem='${prompt.memoryTokens}' hasOpt=$hasOptionalFields")
 
-@Composable
-private fun PromptSummaryCard(prompt: Prompt) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+    BaseContentCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
         ) {
-            Text(
-                text = prompt.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${prompt.author.name} • #${prompt.tag}",
-                style = MaterialTheme.typography.bodySmall
-            )
-            if (prompt.description.isNotBlank()) {
-                Text(prompt.description, fontWeight = FontWeight.SemiBold)
-            }
-            Text(
-                text = prompt.content,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun UserSearchCard(userResult: UserSearchResult) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = userResult.user.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "${userResult.user.email} • ${userResult.user.department} - ${userResult.user.school}",
-                style = MaterialTheme.typography.bodySmall
-            )
-
-            if (userResult.prompts.isNotEmpty()) {
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = "Public Prompts (${userResult.prompts.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                userResult.prompts.forEach { prompt ->
-                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = prompt.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (prompt.isPrivate && isOwnPrompt) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small
                         ) {
                             Text(
-                                text = prompt.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "#${prompt.tag}",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            if (prompt.description.isNotBlank()) {
-                                Text(prompt.description, style = MaterialTheme.typography.bodySmall)
-                            }
-                            Text(
-                                text = prompt.content,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall
+                                text = "PRIVATE",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                         }
                     }
                 }
-            } else {
+
+                Spacer(modifier = Modifier.size(4.dp))
+
                 Text(
-                    text = "No public prompts shared yet",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
+            Text(
+                text = "#${prompt.tag}",
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+
+        if (prompt.description.isNotBlank()) {
+            Text(
+                text = prompt.description,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Text(
+            text = prompt.content,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        if (hasOptionalFields) {
+            OutlinedButton(
+                onClick = { showOptional = !showOptional },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    if (showOptional) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(if (showOptional) "Hide Details" else "Show Details")
+            }
+
+            AnimatedVisibility(visible = showOptional) {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    prompt.temperature?.let {
+                        Text("Temperature: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    prompt.context?.let {
+                        Text("Context: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                    prompt.memoryTokens?.let {
+                        Text("Memory: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostSummaryCard(post: Post) {
+    BaseContentCard {
+        Text(
+            text = post.title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(
+            text = "${post.author.name} • ${post.createdAt.formatRelative()} • #${post.tag}",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = post.body,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text("Score: ${post.voteSummary.score} • ${post.commentCount} comments")
+    }
+}
+
+@Composable
+private fun UserSearchCard(
+    userResult: UserSearchResult,
+    isOwnProfile: Boolean
+) {
+    val publicPrompts = userResult.prompts.filter { !it.isPrivate }
+    val privatePrompts = userResult.prompts.filter { it.isPrivate }
+
+    BaseContentCard {
+        Text(
+            text = userResult.user.name,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(
+            text = "${userResult.user.email} • ${userResult.user.department} - ${userResult.user.school}",
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        if (userResult.prompts.isNotEmpty()) {
+            Spacer(modifier = Modifier.size(8.dp))
+
+            if (isOwnProfile) {
+                Text(
+                    text = "Public Prompts (${publicPrompts.size}) • Private Prompts (${privatePrompts.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            } else {
+                Text(
+                    text = "Public Prompts (${publicPrompts.size})",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            userResult.prompts.forEach { prompt ->
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = prompt.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (prompt.isPrivate && isOwnProfile) {
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            shape = MaterialTheme.shapes.small
+                                        ) {
+                                            Text(
+                                                text = "PRIVATE",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 4.dp,
+                                                    vertical = 1.dp
+                                                ),
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Text(
+                                text = "#${prompt.tag}",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                        if (prompt.description.isNotBlank()) {
+                            Text(prompt.description, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text(
+                            text = prompt.content,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        prompt.temperature?.let {
+                            Text("Temp: $it", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "No public prompts shared yet",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

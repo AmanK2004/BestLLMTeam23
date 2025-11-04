@@ -3,9 +3,7 @@ package com.example.csci310team23.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.csci310team23.data.local.CommentVoteEntity
-import com.example.csci310team23.data.local.PostVoteEntity
-import com.example.csci310team23.data.model.Comment
+import com.example.csci310team23.data.local.PreferencesManager
 import com.example.csci310team23.data.model.Post
 import com.example.csci310team23.data.model.PostSearchType
 import com.example.csci310team23.data.model.Prompt
@@ -17,15 +15,13 @@ import com.example.csci310team23.data.model.toDomain
 import com.example.csci310team23.data.model.toProfile
 import com.example.csci310team23.data.repository.AppDataSnapshot
 import com.example.csci310team23.data.repository.AppRepository
-import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.comparisons.compareByDescending
-import kotlin.comparisons.thenByDescending
+import java.time.LocalDate
 
 data class UserSearchResult(
     val user: UserSummary,
@@ -49,16 +45,19 @@ data class AppUiState(
     val trending: List<Post> = emptyList(),
     val searchState: SearchState = SearchState(),
     val watchedTags: Set<String> = emptySet(),
-    val watchedUsers: Set<Long> = emptySet(),
+    val watchedUserEmails: Set<String> = emptySet(),
+    val allUsers: List<UserProfile> = emptyList(),
     val errorMessage: String? = null,
     val infoMessage: String? = null
 )
 
 class AppViewModel(
-    private val repository: AppRepository
+    private val repository: AppRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
-
-    private val _authState = MutableStateFlow(AuthUiState())
+    private val _authState = MutableStateFlow(
+        AuthUiState(hasSeenLanding = preferencesManager.hasSeenLanding)
+    )
     val authState: StateFlow<AuthUiState> = _authState.asStateFlow()
 
     private val _uiState = MutableStateFlow(AppUiState())
@@ -75,9 +74,14 @@ class AppViewModel(
                 val currentUser = userId?.let { userProfiles[it] }
                 val allPosts = buildAllPosts(snapshot, userProfiles, userId)
                 val allPrompts = buildPrompts(snapshot, userProfiles, userId)
+                val allUsers = snapshot.users.map { it.toProfile() }
 
-                // Filter posts for feed based on watched content
-                val feedPosts = filterFeedPosts(allPosts, userId, _uiState.value.watchedTags, _uiState.value.watchedUsers)
+                val feedPosts = filterFeedPosts(
+                    allPosts,
+                    userId,
+                    _uiState.value.watchedTags,
+                    _uiState.value.watchedUserEmails
+                )
 
                 val trending = allPosts
                     .filter { it.isPublished }
@@ -90,14 +94,16 @@ class AppViewModel(
                 val requiresProfile = currentUser?.let { !it.isProfileComplete } == true
 
                 _uiState.update { state ->
-                    val updatedSearch = state.searchState.recompute(allPosts, allPrompts, snapshot.users.map { it.toProfile() })
+                    val updatedSearch =
+                        state.searchState.recompute(allPosts, allPrompts, allUsers, userId)
                     state.copy(
                         currentUser = currentUser,
                         requiresProfileSetup = requiresProfile,
                         posts = feedPosts,
                         prompts = allPrompts,
                         trending = trending,
-                        searchState = updatedSearch
+                        searchState = updatedSearch,
+                        allUsers = allUsers
                     )
                 }
             }
@@ -108,19 +114,17 @@ class AppViewModel(
         allPosts: List<Post>,
         userId: Long?,
         watchedTags: Set<String>,
-        watchedUsers: Set<Long>
+        watchedUserEmails: Set<String>
     ): List<Post> {
         return allPosts.filter { post ->
-            // Show user's own posts/drafts
             post.author.id == userId ||
-                    // Show published posts from watched users
-                    (post.isPublished && post.author.id in watchedUsers) ||
-                    // Show published posts with watched tags
+                    (post.isPublished && post.author.email in watchedUserEmails) ||
                     (post.isPublished && post.tag in watchedTags)
         }
     }
 
     fun completeLanding() {
+        preferencesManager.hasSeenLanding = true
         _authState.update { it.copy(hasSeenLanding = true) }
     }
 
@@ -167,7 +171,11 @@ class AppViewModel(
                 val profile = repository.completeProfile(userId, department, school, birthDate, bio)
                 _uiState.update { it.copy(currentUser = profile, infoMessage = "Profile updated") }
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.message ?: "Unable to complete profile") }
+                _uiState.update {
+                    it.copy(
+                        errorMessage = e.message ?: "Unable to complete profile"
+                    )
+                }
             }
         }
     }
@@ -197,8 +205,11 @@ class AppViewModel(
     }
 
     fun logout() {
-        currentUserId.value = null
-        _uiState.update { it.copy(infoMessage = "Signed out", errorMessage = null) }
+        _uiState.update { it.copy(infoMessage = "Signed out successfully") }
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(100)
+            currentUserId.value = null
+        }
     }
 
     fun createPost(title: String, body: String, tag: String, isDraft: Boolean = false) {
@@ -293,12 +304,32 @@ class AppViewModel(
         }
     }
 
-    fun createPrompt(title: String, description: String, content: String, tag: String, isPrivate: Boolean = false) {
+    fun createPrompt(
+        title: String,
+        description: String,
+        content: String,
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean = false
+    ) {
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
             try {
-                repository.createPrompt(userId, title, description, content, tag, isPrivate)
-                val message = if (isPrivate) "Private prompt saved" else "Prompt shared with community"
+                repository.createPrompt(
+                    userId,
+                    title,
+                    description,
+                    content,
+                    tag,
+                    temperature,
+                    context,
+                    memoryTokens,
+                    isPrivate
+                )
+                val message =
+                    if (isPrivate) "Private prompt saved" else "Prompt shared with community"
                 _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to share prompt") }
@@ -306,10 +337,30 @@ class AppViewModel(
         }
     }
 
-    fun updatePrompt(promptId: Long, title: String, description: String, content: String, tag: String, isPrivate: Boolean) {
+    fun updatePrompt(
+        promptId: Long,
+        title: String,
+        description: String,
+        content: String,
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean
+    ) {
         viewModelScope.launch {
             try {
-                repository.updatePrompt(promptId, title, description, content, tag, isPrivate)
+                repository.updatePrompt(
+                    promptId,
+                    title,
+                    description,
+                    content,
+                    tag,
+                    temperature,
+                    context,
+                    memoryTokens,
+                    isPrivate
+                )
                 _uiState.update { it.copy(infoMessage = "Prompt updated") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to update prompt") }
@@ -333,7 +384,12 @@ class AppViewModel(
             val newSearch = state.searchState.copy(
                 postSearchType = type,
                 keyword = keyword
-            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
+            ).recompute(
+                state.posts,
+                state.prompts,
+                state.allUsers,
+                state.currentUser?.id
+            )
             state.copy(searchState = newSearch)
         }
     }
@@ -342,7 +398,12 @@ class AppViewModel(
         _uiState.update { state ->
             val newSearch = state.searchState.copy(
                 promptTag = tag
-            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
+            ).recompute(
+                state.posts,
+                state.prompts,
+                state.allUsers,
+                state.currentUser?.id
+            )
             state.copy(searchState = newSearch)
         }
     }
@@ -351,7 +412,12 @@ class AppViewModel(
         _uiState.update { state ->
             val newSearch = state.searchState.copy(
                 userEmail = email
-            ).recompute(state.posts, state.prompts, state.searchState.allUsers)
+            ).recompute(
+                state.posts,
+                state.prompts,
+                state.allUsers,
+                state.currentUser?.id
+            )
             state.copy(searchState = newSearch)
         }
     }
@@ -367,14 +433,14 @@ class AppViewModel(
         }
     }
 
-    fun watchUser(userId: Long) {
+    fun watchUser(email: String) {
         _uiState.update { state ->
-            val newUsers = if (userId in state.watchedUsers) {
-                state.watchedUsers - userId
+            val newEmails = if (email in state.watchedUserEmails) {
+                state.watchedUserEmails - email
             } else {
-                state.watchedUsers + userId
+                state.watchedUserEmails + email
             }
-            state.copy(watchedUsers = newUsers)
+            state.copy(watchedUserEmails = newEmails)
         }
     }
 
@@ -382,8 +448,14 @@ class AppViewModel(
         _uiState.update { it.copy(errorMessage = null, infoMessage = null) }
     }
 
-    fun refreshAuthError() {
-        _authState.update { it.copy(errorMessage = null) }
+    fun setShowCommentTitles(show: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.showCommentTitles = show
+        }
+    }
+
+    fun getShowCommentTitles(): Boolean {
+        return preferencesManager.showCommentTitles
     }
 
     private fun buildAllPosts(
@@ -397,7 +469,6 @@ class AppViewModel(
         val commentsByPost = snapshot.comments.groupBy { it.postId }
 
         return snapshot.posts.sortedByDescending { it.createdAt }.mapNotNull { post ->
-            // Show all posts - filtering happens in filterFeedPosts
             val author = userSummaries[post.authorId] ?: return@mapNotNull null
             val postComments = commentsByPost[post.id].orEmpty().mapNotNull { comment ->
                 val commentAuthor = userSummaries[comment.authorId] ?: return@mapNotNull null
@@ -425,7 +496,6 @@ class AppViewModel(
         val userSummaries = userProfiles.mapValues { (_, profile) -> profile.summary }
         return snapshot.prompts.sortedByDescending { it.createdAt }
             .mapNotNull { prompt ->
-                // Filter: show public prompts OR user's own private prompts
                 if (prompt.isPrivate && prompt.authorId != currentUserId) {
                     return@mapNotNull null
                 }
@@ -443,13 +513,15 @@ class AppViewModel(
 
     companion object {
         private const val TRENDING_LIMIT = 5
-
-        fun provideFactory(repository: AppRepository): ViewModelProvider.Factory =
+        fun provideFactory(
+            repository: AppRepository,
+            preferencesManager: PreferencesManager
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     if (modelClass.isAssignableFrom(AppViewModel::class.java)) {
-                        return AppViewModel(repository) as T
+                        return AppViewModel(repository, preferencesManager) as T
                     }
                     throw IllegalArgumentException("Unknown ViewModel class")
                 }
