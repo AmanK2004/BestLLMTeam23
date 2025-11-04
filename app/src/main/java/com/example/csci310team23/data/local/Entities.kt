@@ -5,7 +5,10 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "users", indices = [Index(value = ["email"], unique = true), Index(value = ["studentId"], unique = true)])
+@Entity(
+    tableName = "users",
+    indices = [Index(value = ["email"], unique = true), Index(value = ["studentId"], unique = true)]
+)
 data class UserEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,

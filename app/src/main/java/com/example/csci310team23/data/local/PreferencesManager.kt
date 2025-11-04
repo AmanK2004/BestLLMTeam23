@@ -13,9 +13,13 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_HAS_SEEN_LANDING, false)
         set(value) = prefs.edit().putBoolean(KEY_HAS_SEEN_LANDING, value).apply()
 
-    var showCommentTitles: Boolean
-        get() = prefs.getBoolean(KEY_SHOW_COMMENT_TITLES, true)
-        set(value) = prefs.edit().putBoolean(KEY_SHOW_COMMENT_TITLES, value).apply()
+    fun setShowCommentTitles(userId: Long, show: Boolean) {
+        prefs.edit().putBoolean("${KEY_SHOW_COMMENT_TITLES}_$userId", show).apply()
+    }
+
+    fun getShowCommentTitles(userId: Long): Boolean {
+        return prefs.getBoolean("${KEY_SHOW_COMMENT_TITLES}_$userId", true) // Default to true
+    }
 
     companion object {
         private const val KEY_HAS_SEEN_LANDING = "has_seen_landing"

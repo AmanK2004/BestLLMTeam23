@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.csci310team23.data.local.PreferencesManager
+import com.example.csci310team23.data.model.AuthMode
 import com.example.csci310team23.data.model.Post
 import com.example.csci310team23.data.model.PostSearchType
 import com.example.csci310team23.data.model.Prompt
@@ -32,10 +33,9 @@ data class AuthUiState(
     val mode: AuthMode = AuthMode.SIGN_IN,
     val isProcessing: Boolean = false,
     val errorMessage: String? = null,
+    val infoMessage: String? = null,
     val hasSeenLanding: Boolean = false
 )
-
-enum class AuthMode { SIGN_IN, REGISTER }
 
 data class AppUiState(
     val currentUser: UserProfile? = null,
@@ -201,14 +201,6 @@ class AppViewModel(
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to reset password") }
             }
-        }
-    }
-
-    fun logout() {
-        _uiState.update { it.copy(infoMessage = "Signed out successfully") }
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(100)
-            currentUserId.value = null
         }
     }
 
@@ -444,18 +436,26 @@ class AppViewModel(
         }
     }
 
-    fun clearMessage() {
-        _uiState.update { it.copy(errorMessage = null, infoMessage = null) }
-    }
-
     fun setShowCommentTitles(show: Boolean) {
+        val userId = currentUserId.value ?: return
         viewModelScope.launch {
-            preferencesManager.showCommentTitles = show
+            preferencesManager.setShowCommentTitles(userId, show)
         }
     }
 
     fun getShowCommentTitles(): Boolean {
-        return preferencesManager.showCommentTitles
+        val userId = currentUserId.value ?: return true
+        return preferencesManager.getShowCommentTitles(userId)
+    }
+
+    fun logout() {
+        _authState.update { it.copy(infoMessage = "Signed out successfully") }
+        currentUserId.value = null
+    }
+
+    fun clearMessage() {
+        _uiState.update { it.copy(errorMessage = null, infoMessage = null) }
+        _authState.update { it.copy(errorMessage = null, infoMessage = null) }
     }
 
     private fun buildAllPosts(

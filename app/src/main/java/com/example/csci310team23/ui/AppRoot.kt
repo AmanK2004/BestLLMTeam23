@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.csci310team23.AppGraph
+import com.example.csci310team23.data.model.AuthMode
 import com.example.csci310team23.data.model.Comment
 import com.example.csci310team23.data.model.Post
 import com.example.csci310team23.data.model.PostSearchType
@@ -242,135 +243,153 @@ private fun AuthScreen(
     var password by rememberSaveable { mutableStateOf("") }
     var confirmPassword by rememberSaveable { mutableStateOf("") }
     var localError by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val viewModel: AppViewModel = viewModel()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "USC LLM Community",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
+    LaunchedEffect(authState.errorMessage, authState.infoMessage) {
+        authState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+        authState.infoMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessage()
+        }
+    }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            FilterChip(
-                selected = authState.mode == AuthMode.SIGN_IN,
-                onClick = {
-                    localError = null
-                    onModeChange(AuthMode.SIGN_IN)
-                },
-                label = { Text("Sign In") }
+            Text(
+                text = "USC LLM Community",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 24.dp)
             )
-            FilterChip(
-                selected = authState.mode == AuthMode.REGISTER,
-                onClick = {
-                    localError = null
-                    onModeChange(AuthMode.REGISTER)
-                },
-                label = { Text("Register") }
-            )
-        }
 
-        Spacer(modifier = Modifier.size(24.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = authState.mode == AuthMode.SIGN_IN,
+                    onClick = {
+                        localError = null
+                        onModeChange(AuthMode.SIGN_IN)
+                    },
+                    label = { Text("Sign In") }
+                )
+                FilterChip(
+                    selected = authState.mode == AuthMode.REGISTER,
+                    onClick = {
+                        localError = null
+                        onModeChange(AuthMode.REGISTER)
+                    },
+                    label = { Text("Register") }
+                )
+            }
 
-        if (authState.mode == AuthMode.REGISTER) {
+            Spacer(modifier = Modifier.size(24.dp))
+
+            if (authState.mode == AuthMode.REGISTER) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Full Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                )
+                Spacer(Modifier.size(12.dp))
+            }
+
             OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Full Name") },
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("USC Email") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(0.9f)
             )
             Spacer(Modifier.size(12.dp))
-        }
 
-        OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("USC Email") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(0.9f)
-        )
-        Spacer(Modifier.size(12.dp))
+            if (authState.mode == AuthMode.REGISTER) {
+                OutlinedTextField(
+                    value = studentId,
+                    onValueChange = { studentId = it.filter { ch -> ch.isDigit() }.take(10) },
+                    label = { Text("Student ID (10 digits)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(0.9f)
+                )
+                Spacer(Modifier.size(12.dp))
+            }
 
-        if (authState.mode == AuthMode.REGISTER) {
             OutlinedTextField(
-                value = studentId,
-                onValueChange = { studentId = it.filter { ch -> ch.isDigit() }.take(10) },
-                label = { Text("Student ID (10 digits)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(0.9f)
-            )
-            Spacer(Modifier.size(12.dp))
-        }
-
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(0.9f),
-            visualTransformation = PasswordVisualTransformation()
-        )
-
-        if (authState.mode == AuthMode.REGISTER) {
-            Spacer(Modifier.size(12.dp))
-            OutlinedTextField(
-                value = confirmPassword,
-                onValueChange = { confirmPassword = it },
-                label = { Text("Confirm Password") },
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(0.9f),
                 visualTransformation = PasswordVisualTransformation()
             )
-        }
 
-        Spacer(modifier = Modifier.size(24.dp))
+            if (authState.mode == AuthMode.REGISTER) {
+                Spacer(Modifier.size(12.dp))
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("Confirm Password") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(0.9f),
+                    visualTransformation = PasswordVisualTransformation()
+                )
+            }
 
-        val errorMessage = localError ?: authState.errorMessage
-        errorMessage?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
+            Spacer(modifier = Modifier.size(24.dp))
 
-        Button(
-            enabled = !authState.isProcessing,
-            onClick = {
-                if (authState.mode == AuthMode.SIGN_IN) {
-                    if (email.isBlank() || password.isBlank()) {
-                        localError = "Email and password are required"
-                        return@Button
+            val errorMessage = localError ?: authState.errorMessage
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+            }
+
+            Button(
+                enabled = !authState.isProcessing,
+                onClick = {
+                    if (authState.mode == AuthMode.SIGN_IN) {
+                        if (email.isBlank() || password.isBlank()) {
+                            localError = "Email and password are required"
+                            return@Button
+                        }
+                        localError = null
+                        onSignIn(email.trim(), password)
+                    } else {
+                        if (name.isBlank() || email.isBlank() || studentId.length != 10 || password.isBlank()) {
+                            localError = "Please fill in all registration fields with valid values"
+                            return@Button
+                        }
+                        if (password != confirmPassword) {
+                            localError = "Passwords do not match"
+                            return@Button
+                        }
+                        localError = null
+                        onRegister(name.trim(), email.trim(), studentId.trim(), password)
                     }
-                    localError = null
-                    onSignIn(email.trim(), password)
-                } else {
-                    if (name.isBlank() || email.isBlank() || studentId.length != 10 || password.isBlank()) {
-                        localError = "Please fill in all registration fields with valid values"
-                        return@Button
-                    }
-                    if (password != confirmPassword) {
-                        localError = "Passwords do not match"
-                        return@Button
-                    }
-                    localError = null
-                    onRegister(name.trim(), email.trim(), studentId.trim(), password)
-                }
-            },
-            modifier = Modifier.fillMaxWidth(0.9f)
-        ) {
-            Text(if (authState.mode == AuthMode.SIGN_IN) "Sign In" else "Register")
+                },
+                modifier = Modifier.fillMaxWidth(0.9f)
+            ) {
+                Text(if (authState.mode == AuthMode.SIGN_IN) "Sign In" else "Register")
+            }
         }
     }
 }
@@ -696,16 +715,15 @@ private fun FeedSection(
             PostCard(
                 post = post,
                 currentUser = currentUser,
-                onUpdatePost = { _, _, _, _ -> }, // Provide empty implementation
-                onDeletePost = { _ -> }, // Provide empty implementation
-                onPublishDraft = { _ -> }, // Provide empty implementation
-                onCreateComment = { _, _, _ -> }, // Provide empty implementation
-                onUpdateComment = { _, _, _ -> }, // Provide empty implementation
+                onUpdatePost = onUpdatePost,
+                onDeletePost = onDeletePost,
+                onPublishDraft = onPublishDraft,
+                onCreateComment = onCreateComment,
+                onUpdateComment = onUpdateComment,
                 onVotePost = onVotePost,
                 onVoteComment = onVoteComment,
                 enableCommentComposer = true,
                 showVoting = post.isPublished
-                // Remove viewModel parameter
             )
         }
         if (posts.isEmpty()) {
@@ -877,16 +895,15 @@ private fun TrendingSection(
             PostCard(
                 post = post,
                 currentUser = currentUser,
-                onUpdatePost = { _, _, _, _ -> }, // Provide empty implementation
-                onDeletePost = { _ -> }, // Provide empty implementation
-                onPublishDraft = { _ -> }, // Provide empty implementation
-                onCreateComment = { _, _, _ -> }, // Provide empty implementation
-                onUpdateComment = { _, _, _ -> }, // Provide empty implementation
+                onUpdatePost = { _, _, _, _ -> },
+                onDeletePost = { _ -> },
+                onPublishDraft = { _ -> },
+                onCreateComment = { _, _, _ -> },
+                onUpdateComment = { _, _, _ -> },
                 onVotePost = onVotePost,
                 onVoteComment = onVoteComment,
                 enableCommentComposer = false,
                 showVoting = true
-                // Remove viewModel parameter
             )
         }
 
@@ -1315,10 +1332,10 @@ private fun ProfileSection(
     var showEditPassword by rememberSaveable { mutableStateOf(false) }
     var showDisplaySettings by rememberSaveable { mutableStateOf(false) }
     var showChangeEmail by rememberSaveable { mutableStateOf(false) }
-    var showCommentTitles by remember {
+
+    var showCommentTitles by remember(user.id) {
         mutableStateOf(viewModel.getShowCommentTitles())
     }
-
 
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
@@ -2077,9 +2094,7 @@ private fun CommentCard(
     currentUser: UserProfile?,
     onUpdateComment: (Long, String?, String) -> Unit,
     onVoteComment: (Long, Int) -> Unit
-    // Remove viewModel parameter
 ) {
-    // Get viewModel inside the composable
     val viewModel: AppViewModel = viewModel()
 
     var showEdit by remember { mutableStateOf(false) }
@@ -2087,8 +2102,11 @@ private fun CommentCard(
     var editTitle by remember { mutableStateOf(comment.title ?: "") }
     var editBody by remember { mutableStateOf(comment.body) }
 
-    // Get the setting from ViewModel
-    val showCommentTitle = viewModel.getShowCommentTitles()
+    val showCommentTitle = if (currentUser != null) {
+        remember(currentUser.id) { viewModel.getShowCommentTitles() }
+    } else {
+        true
+    }
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -2101,7 +2119,6 @@ private fun CommentCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    // Conditionally show the comment title
                     if (showCommentTitle) {
                         Text(
                             text = comment.title ?: "Comment",
@@ -2124,7 +2141,6 @@ private fun CommentCard(
                     }
                 }
 
-                // Menu button for comment options
                 if (currentUser?.id == comment.author.id) {
                     IconButton(
                         onClick = { showMenu = true },
