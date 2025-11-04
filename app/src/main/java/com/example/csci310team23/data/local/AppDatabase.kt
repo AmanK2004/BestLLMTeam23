@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -14,10 +12,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CommentEntity::class,
         PromptEntity::class,
         PostVoteEntity::class,
-        CommentVoteEntity::class
+        CommentVoteEntity::class,
+        TagWatchHistoryEntity::class,
+        UserWatchHistoryEntity::class
     ],
-    version = 3,
-    exportSchema = false
+    version = 1
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
@@ -26,31 +25,24 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun promptDao(): PromptDao
     abstract fun postVoteDao(): PostVoteDao
     abstract fun commentVoteDao(): CommentVoteDao
+    abstract fun tagWatchHistoryDao(): TagWatchHistoryDao
+    abstract fun userWatchHistoryDao(): UserWatchHistoryDao
 
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE prompts ADD COLUMN temperature TEXT")
-                database.execSQL("ALTER TABLE prompts ADD COLUMN context TEXT")
-                database.execSQL("ALTER TABLE prompts ADD COLUMN memoryTokens TEXT")
-            }
-        }
-
         fun get(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
+                val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "usc-llm-community.db"
-                )
-                    .addMigrations(MIGRATION_2_3)
-                    .fallbackToDestructiveMigration()
-                    .build()
-                    .also { INSTANCE = it }
+                    "app_database"
+                ).build()
+                INSTANCE = instance
+                instance
             }
         }
     }
+
 }

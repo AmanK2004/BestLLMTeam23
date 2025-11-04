@@ -1308,7 +1308,7 @@ private fun SearchSection(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Search Prompts")
+                            Text("Search Public Prompts")
                         }
                     }
                 }

@@ -10,17 +10,25 @@ import com.example.csci310team23.data.local.PostVoteDao
 import com.example.csci310team23.data.local.PostVoteEntity
 import com.example.csci310team23.data.local.PromptDao
 import com.example.csci310team23.data.local.PromptEntity
+import com.example.csci310team23.data.local.TagWatchHistoryDao
+import com.example.csci310team23.data.local.TagWatchHistoryEntity
 import com.example.csci310team23.data.local.UserDao
 import com.example.csci310team23.data.local.UserEntity
+import com.example.csci310team23.data.local.UserWatchHistoryDao
+import com.example.csci310team23.data.local.UserWatchHistoryEntity
+import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
+import com.example.csci310team23.data.model.UserWatchHistory
 import com.example.csci310team23.data.model.toEpochDayOrNull
 import com.example.csci310team23.data.model.toProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
+
 
 data class AppDataSnapshot(
     val users: List<UserEntity>,
@@ -140,6 +148,22 @@ interface AppRepository {
     )
 
     suspend fun deletePrompt(promptId: Long)
+    suspend fun saveTagWatchHistory(
+        userId: Long,
+        tag: String,
+        startTime: Instant,
+        endTime: Instant? = null
+    )
+
+    suspend fun saveUserWatchHistory(
+        userId: Long,
+        watchedUserEmail: String,
+        startTime: Instant,
+        endTime: Instant? = null
+    )
+
+    suspend fun getTagWatchHistory(userId: Long): List<TagWatchHistory>
+    suspend fun getUserWatchHistory(userId: Long): List<UserWatchHistory>
 }
 
 class RoomAppRepository(
@@ -148,9 +172,10 @@ class RoomAppRepository(
     private val commentDao: CommentDao,
     private val promptDao: PromptDao,
     private val postVoteDao: PostVoteDao,
-    private val commentVoteDao: CommentVoteDao
+    private val commentVoteDao: CommentVoteDao,
+    private val tagWatchHistoryDao: TagWatchHistoryDao,
+    private val userWatchHistoryDao: UserWatchHistoryDao
 ) : AppRepository {
-
     companion object {
         const val MAX_BIO_LENGTH = 500
         const val MIN_AGE_YEARS = 18
@@ -538,6 +563,69 @@ class RoomAppRepository(
 
     override suspend fun deletePrompt(promptId: Long) {
         promptDao.delete(promptId)
+    }
+
+    override suspend fun saveTagWatchHistory(
+        userId: Long,
+        tag: String,
+        startTime: Instant,
+        endTime: Instant?
+    ) {
+        val entity = TagWatchHistoryEntity(
+            userId = userId,
+            tag = tag,
+            startTime = startTime.toEpochMilli(),
+            endTime = endTime?.toEpochMilli()
+        )
+
+        val existing = tagWatchHistoryDao.getByUserId(userId).find { it.tag == tag }
+        if (existing != null) {
+            tagWatchHistoryDao.update(entity.copy(id = existing.id))
+        } else {
+            tagWatchHistoryDao.insert(entity)
+        }
+    }
+
+    override suspend fun saveUserWatchHistory(
+        userId: Long,
+        watchedUserEmail: String,
+        startTime: Instant,
+        endTime: Instant?
+    ) {
+        val entity = UserWatchHistoryEntity(
+            userId = userId,
+            watchedUserEmail = watchedUserEmail,
+            startTime = startTime.toEpochMilli(),
+            endTime = endTime?.toEpochMilli()
+        )
+
+        val existing =
+            userWatchHistoryDao.getByUserId(userId).find { it.watchedUserEmail == watchedUserEmail }
+        if (existing != null) {
+            userWatchHistoryDao.update(entity.copy(id = existing.id))
+        } else {
+            userWatchHistoryDao.insert(entity)
+        }
+    }
+
+    override suspend fun getTagWatchHistory(userId: Long): List<TagWatchHistory> {
+        return tagWatchHistoryDao.getByUserId(userId).map { entity ->
+            TagWatchHistory(
+                tag = entity.tag,
+                startTime = Instant.ofEpochMilli(entity.startTime),
+                endTime = entity.endTime?.let { Instant.ofEpochMilli(it) }
+            )
+        }
+    }
+
+    override suspend fun getUserWatchHistory(userId: Long): List<UserWatchHistory> {
+        return userWatchHistoryDao.getByUserId(userId).map { entity ->
+            UserWatchHistory(
+                email = entity.watchedUserEmail,
+                startTime = Instant.ofEpochMilli(entity.startTime),
+                endTime = entity.endTime?.let { Instant.ofEpochMilli(it) }
+            )
+        }
     }
 }
 

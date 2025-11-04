@@ -41,10 +41,12 @@ data class AuthUiState(
     val hasSeenLanding: Boolean = false
 )
 
+
 data class AppUiState(
     val currentUser: UserProfile? = null,
     val requiresProfileSetup: Boolean = false,
     val posts: List<Post> = emptyList(),
+    val allPosts: List<Post> = emptyList(),
     val prompts: List<Prompt> = emptyList(),
     val trending: List<Post> = emptyList(),
     val searchState: SearchState = SearchState(),
@@ -55,7 +57,6 @@ data class AppUiState(
     val infoMessage: String? = null,
     val isFeedRefreshing: Boolean = false
 )
-
 
 class AppViewModel(
     private val repository: AppRepository,
@@ -138,6 +139,7 @@ class AppViewModel(
                         currentUser = combinedData.currentUser,
                         requiresProfileSetup = combinedData.requiresProfileSetup,
                         posts = combinedData.feedPosts,
+                        allPosts = combinedData.allPosts,
                         prompts = combinedData.allPrompts,
                         trending = combinedData.trending,
                         searchState = updatedSearch,
@@ -235,6 +237,7 @@ class AppViewModel(
                 val user = repository.authenticate(email, password)
                 if (user != null) {
                     currentUserId.value = user.id
+                    loadWatchHistory(user.id)
                 } else {
                     _authState.update { it.copy(errorMessage = "Invalid credentials") }
                 }
@@ -473,7 +476,7 @@ class AppViewModel(
                 postSearchType = type,
                 keyword = keyword
             ).recompute(
-                state.posts,
+                state.allPosts,
                 state.prompts,
                 state.allUsers,
                 state.currentUser?.id
@@ -487,7 +490,7 @@ class AppViewModel(
             val newSearch = state.searchState.copy(
                 promptTag = tag
             ).recompute(
-                state.posts,
+                state.allPosts,
                 state.prompts,
                 state.allUsers,
                 state.currentUser?.id
@@ -501,7 +504,7 @@ class AppViewModel(
             val newSearch = state.searchState.copy(
                 userEmail = email
             ).recompute(
-                state.posts,
+                state.allPosts,
                 state.prompts,
                 state.allUsers,
                 state.currentUser?.id
@@ -525,13 +528,22 @@ class AppViewModel(
 
     fun watchTag(tag: String) {
         viewModelScope.launch {
+            val userId = currentUserId.value ?: return@launch
             val existingHistory = _uiState.value.watchedTagsHistory.find { it.tag == tag }
+
+            val newEndTime = if (existingHistory?.endTime == null) {
+                Instant.now()
+            } else {
+                null
+            }
+
+            repository.saveTagWatchHistory(userId, tag, Instant.now(), newEndTime)
 
             _uiState.update { state ->
                 val newHistory = if (existingHistory != null) {
                     if (existingHistory.endTime == null) {
                         state.watchedTagsHistory.map { history ->
-                            if (history.tag == tag) history.copy(endTime = Instant.now()) else history
+                            if (history.tag == tag) history.copy(endTime = newEndTime) else history
                         }
                     } else {
                         state.watchedTagsHistory + TagWatchHistory(
@@ -552,13 +564,15 @@ class AppViewModel(
 
             _watchedTagsHistoryFlow.value = _uiState.value.watchedTagsHistory
 
-            val action = if (existingHistory?.endTime == null) "watching" else "stopped watching"
+            val action = if (newEndTime == null) "watching" else "stopped watching"
             _uiState.update { it.copy(infoMessage = "Now $action #$tag") }
         }
     }
 
     fun watchUser(email: String) {
         viewModelScope.launch {
+            val userId = currentUserId.value ?: return@launch
+
             val user = repository.getUserByEmail(email)
             if (user == null) {
                 _uiState.update { state ->
@@ -567,15 +581,24 @@ class AppViewModel(
                 return@launch
             }
 
+            val existingHistory = _uiState.value.watchedUsersHistory.find {
+                it.email.equals(email, ignoreCase = true)
+            }
+
+            val newEndTime = if (existingHistory?.endTime == null) {
+                Instant.now()
+            } else {
+                null
+            }
+
+            repository.saveUserWatchHistory(userId, email, Instant.now(), newEndTime)
+
             _uiState.update { state ->
-                val existingHistory = state.watchedUsersHistory.find {
-                    it.email.equals(email, ignoreCase = true)
-                }
                 val newHistory = if (existingHistory != null) {
                     if (existingHistory.endTime == null) {
                         state.watchedUsersHistory.map { history ->
                             if (history.email.equals(email, ignoreCase = true))
-                                history.copy(endTime = Instant.now())
+                                history.copy(endTime = newEndTime)
                             else history
                         }
                     } else {
@@ -592,21 +615,13 @@ class AppViewModel(
                         endTime = null
                     )
                 }
-
                 state.copy(watchedUsersHistory = newHistory)
             }
 
-            val currentState = _uiState.value
-            val updatedHistory = currentState.watchedUsersHistory.find {
-                it.email.equals(email, ignoreCase = true)
-            }
-            val action = if (updatedHistory?.endTime == null) "watching" else "stopped watching"
+            _watchedUsersHistoryFlow.value = _uiState.value.watchedUsersHistory
 
-            _uiState.update { state ->
-                state.copy(infoMessage = "Now $action ${user.name}")
-            }
-
-            refreshFeed()
+            val action = if (newEndTime == null) "watching" else "stopped watching"
+            _uiState.update { it.copy(infoMessage = "Now $action ${user.name}") }
         }
     }
 
@@ -682,6 +697,23 @@ class AppViewModel(
         return posts
     }
 
+    private fun loadWatchHistory(userId: Long) {
+        viewModelScope.launch {
+            val tagHistory = repository.getTagWatchHistory(userId)
+            val userHistory = repository.getUserWatchHistory(userId)
+
+            _uiState.update { state ->
+                state.copy(
+                    watchedTagsHistory = tagHistory,
+                    watchedUsersHistory = userHistory
+                )
+            }
+
+            _watchedTagsHistoryFlow.value = tagHistory
+            _watchedUsersHistoryFlow.value = userHistory
+        }
+    }
+
     private fun buildPrompts(
         snapshot: AppDataSnapshot,
         userProfiles: Map<Long, UserProfile>,
@@ -691,7 +723,7 @@ class AppViewModel(
             UserSummary(
                 id = profile.id,
                 name = profile.name,
-                email = profile.email, // Include email
+                email = profile.email,
                 department = profile.department,
                 school = profile.school
             )

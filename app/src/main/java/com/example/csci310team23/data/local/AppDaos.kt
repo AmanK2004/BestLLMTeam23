@@ -117,3 +117,33 @@ interface CommentVoteDao {
     @Query("SELECT * FROM comment_votes")
     fun observeAll(): Flow<List<CommentVoteEntity>>
 }
+
+@Dao
+interface TagWatchHistoryDao {
+    @Query("SELECT * FROM tag_watch_history WHERE userId = :userId")
+    suspend fun getByUserId(userId: Long): List<TagWatchHistoryEntity>
+
+    @Insert
+    suspend fun insert(entity: TagWatchHistoryEntity): Long
+
+    @Update
+    suspend fun update(entity: TagWatchHistoryEntity)
+
+    @Query("DELETE FROM tag_watch_history WHERE userId = :userId AND tag = :tag")
+    suspend fun delete(userId: Long, tag: String)
+}
+
+@Dao
+interface UserWatchHistoryDao {
+    @Query("SELECT * FROM user_watch_history WHERE userId = :userId")
+    suspend fun getByUserId(userId: Long): List<UserWatchHistoryEntity>
+
+    @Insert
+    suspend fun insert(entity: UserWatchHistoryEntity): Long
+
+    @Update
+    suspend fun update(entity: UserWatchHistoryEntity)
+
+    @Query("DELETE FROM user_watch_history WHERE userId = :userId AND watchedUserEmail = :email")
+    suspend fun delete(userId: Long, email: String)
+}

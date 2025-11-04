@@ -23,7 +23,9 @@ object AppGraph {
             commentDao = database.commentDao(),
             promptDao = database.promptDao(),
             postVoteDao = database.postVoteDao(),
-            commentVoteDao = database.commentVoteDao()
+            commentVoteDao = database.commentVoteDao(),
+            tagWatchHistoryDao = database.tagWatchHistoryDao(), // Add this
+            userWatchHistoryDao = database.userWatchHistoryDao() // Add this
         )
 
         preferencesManager = PreferencesManager(context.applicationContext)
