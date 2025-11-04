@@ -163,3 +163,21 @@ data class CommentVoteEntity(
     val userId: Long,
     val value: Int
 )
+
+@Entity(tableName = "tag_watch_history")
+data class TagWatchHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val tag: String,
+    val startTime: Long,
+    val endTime: Long? = null
+)
+
+@Entity(tableName = "user_watch_history")
+data class UserWatchHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val watchedUserEmail: String,
+    val startTime: Long,
+    val endTime: Long? = null
+)

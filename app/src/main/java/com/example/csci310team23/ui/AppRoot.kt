@@ -547,7 +547,7 @@ private fun MainScreen(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
                 posts = uiState.posts,
-                isFeedRefreshing = uiState.isFeedRefreshing, // Add this line
+                isFeedRefreshing = uiState.isFeedRefreshing,
                 onCreatePost = { title, body, tag, isDraft ->
                     viewModel.createPost(title, body, tag, isDraft)
                 },
@@ -743,7 +743,6 @@ private fun FeedSection(
                 }
             }
 
-            // Show loading placeholders when refreshing, otherwise show actual posts
             if (isFeedRefreshing) {
                 items(5) { index ->
                     LoadingPostCard()
@@ -3085,7 +3084,6 @@ private fun UserSearchCard(
 @Composable
 private fun LoadingPostCard() {
     BaseContentCard {
-        // Shimmer effect for title
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -3114,7 +3112,6 @@ private fun LoadingPostCard() {
 
         Spacer(modifier = Modifier.size(8.dp))
 
-        // Shimmer effect for metadata
         Box(
             modifier = Modifier
                 .width(120.dp)
@@ -3127,7 +3124,6 @@ private fun LoadingPostCard() {
 
         Spacer(modifier = Modifier.size(12.dp))
 
-        // Shimmer effect for content
         repeat(3) {
             Box(
                 modifier = Modifier
@@ -3143,7 +3139,6 @@ private fun LoadingPostCard() {
 
         Spacer(modifier = Modifier.size(8.dp))
 
-        // Shimmer effect for voting row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
