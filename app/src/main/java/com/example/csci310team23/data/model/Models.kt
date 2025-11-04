@@ -113,17 +113,18 @@ data class SearchState(
         }
 
         val refreshedUsers = if (userEmail.isNotBlank()) {
-            val matchingUser = users.firstOrNull {
-                it.email.equals(userEmail.trim(), ignoreCase = true)
+            val matchingUsers = users.filter { user ->
+                user.email.equals(userEmail.trim(), ignoreCase = true) ||
+                        user.name.lowercase().contains(userEmail.trim().lowercase())
             }
-            matchingUser?.let { user ->
+            matchingUsers.map { user ->
                 val userPrompts = if (user.id == currentUserId) {
                     prompts.filter { it.author.id == user.id }
                 } else {
                     prompts.filter { it.author.id == user.id && !it.isPrivate }
                 }
-                listOf(UserSearchResult(user.summary, userPrompts))
-            } ?: emptyList()
+                UserSearchResult(user.summary, userPrompts)
+            }
         } else {
             emptyList()
         }
@@ -164,7 +165,11 @@ private fun List<Post>.filterBy(type: PostSearchType, keyword: String): List<Pos
     val lower = keyword.lowercase()
     return when (type) {
         PostSearchType.TAG -> filter { it.tag.equals(keyword, ignoreCase = true) }
-        PostSearchType.AUTHOR -> filter { it.author.name.lowercase().contains(lower) }
+        PostSearchType.AUTHOR -> filter {
+            it.author.name.lowercase().contains(lower) ||
+                    it.author.email.lowercase().contains(lower)
+        }
+
         PostSearchType.TITLE -> filter { it.title.lowercase().contains(lower) }
         PostSearchType.FULL_TEXT -> filter {
             it.title.lowercase().contains(lower) || it.body.lowercase().contains(lower)

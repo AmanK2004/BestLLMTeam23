@@ -531,7 +531,8 @@ class AppViewModel(
             val userId = currentUserId.value ?: return@launch
             val existingHistory = _uiState.value.watchedTagsHistory.find { it.tag == tag }
 
-            val newEndTime = if (existingHistory?.endTime == null) {
+            val isCurrentlyWatching = existingHistory?.endTime == null
+            val newEndTime = if (isCurrentlyWatching) {
                 Instant.now()
             } else {
                 null
@@ -541,7 +542,7 @@ class AppViewModel(
 
             _uiState.update { state ->
                 val newHistory = if (existingHistory != null) {
-                    if (existingHistory.endTime == null) {
+                    if (isCurrentlyWatching) {
                         state.watchedTagsHistory.map { history ->
                             if (history.tag == tag) history.copy(endTime = newEndTime) else history
                         }
@@ -564,7 +565,7 @@ class AppViewModel(
 
             _watchedTagsHistoryFlow.value = _uiState.value.watchedTagsHistory
 
-            val action = if (newEndTime == null) "watching" else "stopped watching"
+            val action = if (isCurrentlyWatching) "stopped watching" else "watching"
             _uiState.update { it.copy(infoMessage = "Now $action #$tag") }
         }
     }
@@ -585,7 +586,8 @@ class AppViewModel(
                 it.email.equals(email, ignoreCase = true)
             }
 
-            val newEndTime = if (existingHistory?.endTime == null) {
+            val isCurrentlyWatching = existingHistory?.endTime == null
+            val newEndTime = if (isCurrentlyWatching) {
                 Instant.now()
             } else {
                 null
@@ -595,7 +597,7 @@ class AppViewModel(
 
             _uiState.update { state ->
                 val newHistory = if (existingHistory != null) {
-                    if (existingHistory.endTime == null) {
+                    if (isCurrentlyWatching) {
                         state.watchedUsersHistory.map { history ->
                             if (history.email.equals(email, ignoreCase = true))
                                 history.copy(endTime = newEndTime)
@@ -620,7 +622,7 @@ class AppViewModel(
 
             _watchedUsersHistoryFlow.value = _uiState.value.watchedUsersHistory
 
-            val action = if (newEndTime == null) "watching" else "stopped watching"
+            val action = if (isCurrentlyWatching) "stopped watching" else "watching"
             _uiState.update { it.copy(infoMessage = "Now $action ${user.name}") }
         }
     }
