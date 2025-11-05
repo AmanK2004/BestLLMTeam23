@@ -99,6 +99,7 @@ import com.example.csci310team23.data.model.formatRelative
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.time.LocalDate
+import java.time.Period
 import java.util.Calendar
 
 private val AI_AGENTS = listOf(
@@ -413,6 +414,7 @@ private fun ProfileSetupScreen(
     var birthDate by rememberSaveable { mutableStateOf(user.birthDate) }
     var bio by rememberSaveable { mutableStateOf(user.bio) }
     var error by remember { mutableStateOf<String?>(null) }
+    var birthDateError by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
@@ -424,7 +426,15 @@ private fun ProfileSetupScreen(
         DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                birthDate = LocalDate.of(year, month + 1, dayOfMonth)
+                val selectedDate = LocalDate.of(year, month + 1, dayOfMonth)
+                birthDate = selectedDate
+
+                val age = Period.between(selectedDate, LocalDate.now()).years
+                birthDateError = if (age < 18) {
+                    "You must be 18 or older"
+                } else {
+                    null
+                }
             },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
@@ -459,11 +469,21 @@ private fun ProfileSetupScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
-        OutlinedButton(
-            onClick = { datePickerDialog.show() },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(birthDate?.toString() ?: "Select Birth Date")
+        Column {
+            OutlinedButton(
+                onClick = { datePickerDialog.show() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(birthDate?.toString() ?: "Select Birth Date")
+            }
+            birthDateError?.let { errorText ->
+                Text(
+                    text = errorText,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                )
+            }
         }
 
         OutlinedTextField(
@@ -475,18 +495,30 @@ private fun ProfileSetupScreen(
                 .heightIn(min = 120.dp)
         )
 
-        error?.let {
+        error?.let { errorText ->
             Text(
-                text = it,
+                text = errorText,
                 color = MaterialTheme.colorScheme.error
             )
         }
 
         Button(onClick = {
+            birthDateError = null
+            error = null
+
             if (department.isBlank() || school.isBlank()) {
                 error = "Affiliation information is required"
                 return@Button
             }
+
+            birthDate?.let { date ->
+                val age = Period.between(date, LocalDate.now()).years
+                if (age < 18) {
+                    birthDateError = "You must be 18 or older"
+                    return@Button
+                }
+            }
+
             onComplete(department.trim(), school.trim(), birthDate, bio.trim())
         }) {
             Text("Save Profile")
@@ -1392,6 +1424,7 @@ private fun ProfileSection(
     var showEditPassword by rememberSaveable { mutableStateOf(false) }
     var showDisplaySettings by rememberSaveable { mutableStateOf(false) }
     var showChangeEmail by rememberSaveable { mutableStateOf(false) }
+    var birthDateError by remember { mutableStateOf<String?>(null) }
 
     var showCommentTitles by remember(user.id) {
         mutableStateOf(viewModel.getShowCommentTitles())
@@ -1407,7 +1440,15 @@ private fun ProfileSection(
         DatePickerDialog(
             context,
             { _, year, month, dayOfMonth ->
-                birthDate = LocalDate.of(year, month + 1, dayOfMonth)
+                val selectedDate = LocalDate.of(year, month + 1, dayOfMonth)
+                birthDate = selectedDate
+
+                val age = Period.between(selectedDate, LocalDate.now()).years
+                birthDateError = if (age < 18) {
+                    "You must be 18 or older"
+                } else {
+                    null
+                }
             },
             calendar.get(Calendar.YEAR),
             calendar.get(Calendar.MONTH),
@@ -1467,11 +1508,24 @@ private fun ProfileSection(
                             modifier = Modifier.padding(top = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = { datePickerDialog.show() },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(birthDate?.toString() ?: "Select Birth Date")
+                            Column {
+                                OutlinedButton(
+                                    onClick = {
+                                        datePickerDialog.show()
+                                        birthDateError = null
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(birthDate?.toString() ?: "Select Birth Date")
+                                }
+                                birthDateError?.let { errorText ->
+                                    Text(
+                                        text = errorText,
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+                                    )
+                                }
                             }
 
                             OutlinedTextField(
@@ -1485,6 +1539,17 @@ private fun ProfileSection(
 
                             Button(
                                 onClick = {
+                                    birthDateError = null
+                                    message = null
+
+                                    birthDate?.let { date ->
+                                        val age = Period.between(date, LocalDate.now()).years
+                                        if (age < 18) {
+                                            birthDateError = "You must be 18 or older"
+                                            return@Button
+                                        }
+                                    }
+
                                     onUpdateProfile(birthDate, bio.trim())
                                     message = "Profile updated"
                                 },
