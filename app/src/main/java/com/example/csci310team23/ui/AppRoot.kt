@@ -907,7 +907,7 @@ private fun WatchDialog(
                     OutlinedTextField(
                         value = userEmail,
                         onValueChange = { userEmail = it },
-                        label = { Text("USC Email/Display Name") },
+                        label = { Text("USC Email") },
                         modifier = Modifier.weight(1f)
                     )
                     Button(
