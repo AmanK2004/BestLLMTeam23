@@ -13,7 +13,8 @@ fun UserEntity.toProfile(): UserProfile = UserProfile(
     department = department,
     school = school,
     birthDate = birthDateEpochDay.toLocalDate(),
-    bio = bio
+    bio = bio,
+    isProfileComplete = isProfileComplete
 )
 
 fun PostEntity.toDomain(
@@ -32,7 +33,9 @@ fun PostEntity.toDomain(
     commentCount = comments.size,
     comments = comments,
     voteSummary = voteSummary,
-    currentUserVote = currentUserVote
+    currentUserVote = currentUserVote,
+    isPublished = isPublished,
+    isEdited = isEdited
 )
 
 fun CommentEntity.toDomain(
@@ -48,7 +51,8 @@ fun CommentEntity.toDomain(
     createdAt = createdAt.toInstant(),
     updatedAt = updatedAt.toInstant(),
     voteSummary = voteSummary,
-    currentUserVote = currentUserVote
+    currentUserVote = currentUserVote,
+    isEdited = isEdited
 )
 
 fun PromptEntity.toDomain(author: UserSummary): Prompt = Prompt(
@@ -58,6 +62,10 @@ fun PromptEntity.toDomain(author: UserSummary): Prompt = Prompt(
     description = description,
     content = content,
     tag = tag,
+    temperature = temperature,
+    context = context,
+    memoryTokens = memoryTokens,
     createdAt = createdAt.toInstant(),
-    updatedAt = updatedAt.toInstant()
+    updatedAt = updatedAt.toInstant(),
+    isPrivate = isPrivate
 )

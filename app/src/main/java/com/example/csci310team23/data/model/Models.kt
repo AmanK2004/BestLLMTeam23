@@ -1,5 +1,6 @@
 package com.example.csci310team23.data.model
 
+import com.example.csci310team23.ui.UserSearchResult
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -20,7 +21,8 @@ data class UserProfile(
     val department: String,
     val school: String,
     val birthDate: LocalDate?,
-    val bio: String
+    val bio: String,
+    val isProfileComplete: Boolean = false
 ) {
     val summary: UserSummary
         get() = UserSummary(id, name, email, department, school)
@@ -43,7 +45,8 @@ data class Comment(
     val createdAt: Instant,
     val updatedAt: Instant,
     val voteSummary: VoteSummary,
-    val currentUserVote: Int?
+    val currentUserVote: Int?,
+    val isEdited: Boolean = false
 )
 
 data class Post(
@@ -57,7 +60,9 @@ data class Post(
     val commentCount: Int,
     val comments: List<Comment>,
     val voteSummary: VoteSummary,
-    val currentUserVote: Int?
+    val currentUserVote: Int?,
+    val isPublished: Boolean = true,
+    val isEdited: Boolean = false
 )
 
 data class Prompt(
@@ -67,8 +72,12 @@ data class Prompt(
     val description: String,
     val content: String,
     val tag: String,
+    val temperature: String? = null,
+    val context: String? = null,
+    val memoryTokens: String? = null,
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val isPrivate: Boolean = false
 )
 
 enum class PostSearchType { TAG, AUTHOR, TITLE, FULL_TEXT }
@@ -78,22 +87,57 @@ data class SearchState(
     val keyword: String = "",
     val postResults: List<Post> = emptyList(),
     val promptTag: String = "",
-    val promptResults: List<Prompt> = emptyList()
+    val promptResults: List<Prompt> = emptyList(),
+    val userEmail: String = "",
+    val userResults: List<UserSearchResult> = emptyList(),
+    val allUsers: List<UserProfile> = emptyList()
 ) {
-    fun recompute(posts: List<Post>, prompts: List<Prompt>): SearchState {
+    fun recompute(
+        posts: List<Post>,
+        prompts: List<Prompt>,
+        users: List<UserProfile>,
+        currentUserId: Long? = null
+    ): SearchState {
         val refreshedPosts = if (postSearchType != null && keyword.isNotBlank()) {
             posts.filterBy(postSearchType, keyword)
         } else {
             emptyList()
         }
+
         val refreshedPrompts = if (promptTag.isNotBlank()) {
-            prompts.filter { it.tag.equals(promptTag, ignoreCase = true) }
+            prompts.filter {
+                !it.isPrivate && it.tag.equals(promptTag, ignoreCase = true)
+            }
         } else {
             emptyList()
         }
-        return copy(postResults = refreshedPosts, promptResults = refreshedPrompts)
+
+        val refreshedUsers = if (userEmail.isNotBlank()) {
+            val matchingUsers = users.filter { user ->
+                user.email.equals(userEmail.trim(), ignoreCase = true) ||
+                        user.name.lowercase().contains(userEmail.trim().lowercase())
+            }
+            matchingUsers.map { user ->
+                val userPrompts = if (user.id == currentUserId) {
+                    prompts.filter { it.author.id == user.id }
+                } else {
+                    prompts.filter { it.author.id == user.id && !it.isPrivate }
+                }
+                UserSearchResult(user.summary, userPrompts)
+            }
+        } else {
+            emptyList()
+        }
+
+        return copy(
+            postResults = refreshedPosts,
+            promptResults = refreshedPrompts,
+            userResults = refreshedUsers,
+            allUsers = users
+        )
     }
 }
+
 
 fun Long.toInstant(): Instant = Instant.ofEpochMilli(this)
 
@@ -111,7 +155,8 @@ fun Instant.formatRelative(): String {
         seconds < 3600 -> "${seconds / 60}m ago"
         seconds < 86400 -> "${seconds / 3600}h ago"
         seconds < 86400 * 7 -> "${seconds / 86400}d ago"
-        else -> java.time.ZonedDateTime.ofInstant(this, ZoneOffset.systemDefault()).toLocalDate().toString()
+        else -> java.time.ZonedDateTime.ofInstant(this, ZoneOffset.systemDefault()).toLocalDate()
+            .toString()
     }
 }
 
@@ -120,10 +165,26 @@ private fun List<Post>.filterBy(type: PostSearchType, keyword: String): List<Pos
     val lower = keyword.lowercase()
     return when (type) {
         PostSearchType.TAG -> filter { it.tag.equals(keyword, ignoreCase = true) }
-        PostSearchType.AUTHOR -> filter { it.author.name.lowercase().contains(lower) }
+        PostSearchType.AUTHOR -> filter {
+            it.author.name.lowercase().contains(lower) ||
+                    it.author.email.lowercase().contains(lower)
+        }
+
         PostSearchType.TITLE -> filter { it.title.lowercase().contains(lower) }
         PostSearchType.FULL_TEXT -> filter {
             it.title.lowercase().contains(lower) || it.body.lowercase().contains(lower)
         }
     }
 }
+
+data class TagWatchHistory(
+    val tag: String,
+    val startTime: Instant,
+    val endTime: Instant? = null
+)
+
+data class UserWatchHistory(
+    val email: String,
+    val startTime: Instant,
+    val endTime: Instant? = null
+)

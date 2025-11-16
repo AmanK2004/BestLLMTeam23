@@ -5,7 +5,11 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "users", indices = [Index(value = ["email"], unique = true), Index(value = ["studentId"], unique = true)])
+@Entity(
+    tableName = "users",
+    indices = [Index(value = ["email"], unique = true), Index(value = ["studentId"], unique = true)]
+)
+
 data class UserEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -15,7 +19,8 @@ data class UserEntity(
     val department: String,
     val school: String,
     val birthDateEpochDay: Long?,
-    val bio: String
+    val bio: String,
+    val isProfileComplete: Boolean = false
 )
 
 @Entity(
@@ -30,6 +35,7 @@ data class UserEntity(
     ],
     indices = [Index(value = ["authorId"]), Index(value = ["tag"])]
 )
+
 data class PostEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val authorId: Long,
@@ -37,7 +43,9 @@ data class PostEntity(
     val body: String,
     val tag: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPublished: Boolean = true,
+    val isEdited: Boolean = false
 )
 
 @Entity(
@@ -58,6 +66,7 @@ data class PostEntity(
     ],
     indices = [Index(value = ["postId"]), Index(value = ["authorId"])]
 )
+
 data class CommentEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val postId: Long,
@@ -65,7 +74,8 @@ data class CommentEntity(
     val title: String?,
     val body: String,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isEdited: Boolean = false
 )
 
 @Entity(
@@ -80,6 +90,7 @@ data class CommentEntity(
     ],
     indices = [Index(value = ["authorId"]), Index(value = ["tag"])]
 )
+
 data class PromptEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val authorId: Long,
@@ -87,8 +98,12 @@ data class PromptEntity(
     val description: String,
     val content: String,
     val tag: String,
+    val temperature: String? = null,
+    val context: String? = null,
+    val memoryTokens: String? = null,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val isPrivate: Boolean = false
 )
 
 @Entity(
@@ -112,6 +127,7 @@ data class PromptEntity(
         Index(value = ["userId"])
     ]
 )
+
 data class PostVoteEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val postId: Long,
@@ -140,9 +156,28 @@ data class PostVoteEntity(
         Index(value = ["userId"])
     ]
 )
+
 data class CommentVoteEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val commentId: Long,
     val userId: Long,
     val value: Int
+)
+
+@Entity(tableName = "tag_watch_history")
+data class TagWatchHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val tag: String,
+    val startTime: Long,
+    val endTime: Long? = null
+)
+
+@Entity(tableName = "user_watch_history")
+data class UserWatchHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val watchedUserEmail: String,
+    val startTime: Long,
+    val endTime: Long? = null
 )

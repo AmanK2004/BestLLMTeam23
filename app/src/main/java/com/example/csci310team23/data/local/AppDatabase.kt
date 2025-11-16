@@ -12,10 +12,11 @@ import androidx.room.RoomDatabase
         CommentEntity::class,
         PromptEntity::class,
         PostVoteEntity::class,
-        CommentVoteEntity::class
+        CommentVoteEntity::class,
+        TagWatchHistoryEntity::class,
+        UserWatchHistoryEntity::class
     ],
-    version = 1,
-    exportSchema = false
+    version = 1
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
@@ -24,6 +25,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun promptDao(): PromptDao
     abstract fun postVoteDao(): PostVoteDao
     abstract fun commentVoteDao(): CommentVoteDao
+    abstract fun tagWatchHistoryDao(): TagWatchHistoryDao
+    abstract fun userWatchHistoryDao(): UserWatchHistoryDao
 
     companion object {
         @Volatile
@@ -31,12 +34,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun get(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
+                val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "usc-llm-community.db"
-                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
+                    "app_database"
+                ).build()
+                INSTANCE = instance
+                instance
             }
         }
     }
+
 }

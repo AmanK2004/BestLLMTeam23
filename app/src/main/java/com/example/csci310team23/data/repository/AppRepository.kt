@@ -10,16 +10,25 @@ import com.example.csci310team23.data.local.PostVoteDao
 import com.example.csci310team23.data.local.PostVoteEntity
 import com.example.csci310team23.data.local.PromptDao
 import com.example.csci310team23.data.local.PromptEntity
+import com.example.csci310team23.data.local.TagWatchHistoryDao
+import com.example.csci310team23.data.local.TagWatchHistoryEntity
 import com.example.csci310team23.data.local.UserDao
 import com.example.csci310team23.data.local.UserEntity
+import com.example.csci310team23.data.local.UserWatchHistoryDao
+import com.example.csci310team23.data.local.UserWatchHistoryEntity
+import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
-import com.example.csci310team23.data.model.toProfile
+import com.example.csci310team23.data.model.UserWatchHistory
 import com.example.csci310team23.data.model.toEpochDayOrNull
+import com.example.csci310team23.data.model.toProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDate
+import java.time.Period
+
 
 data class AppDataSnapshot(
     val users: List<UserEntity>,
@@ -68,11 +77,14 @@ interface AppRepository {
 
     fun observeData(): Flow<AppDataSnapshot>
 
+    suspend fun getUserByEmail(email: String): UserProfile?
+
     suspend fun createPost(
         authorId: Long,
         title: String,
         body: String,
-        tag: String
+        tag: String,
+        isPublished: Boolean = true
     ): Long
 
     suspend fun updatePost(
@@ -81,6 +93,10 @@ interface AppRepository {
         body: String,
         tag: String
     )
+
+    suspend fun deletePost(postId: Long)
+
+    suspend fun publishDraft(postId: Long)
 
     suspend fun createComment(
         postId: Long,
@@ -112,7 +128,11 @@ interface AppRepository {
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean = false
     ): Long
 
     suspend fun updatePrompt(
@@ -120,10 +140,30 @@ interface AppRepository {
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean = false
     )
 
     suspend fun deletePrompt(promptId: Long)
+    suspend fun saveTagWatchHistory(
+        userId: Long,
+        tag: String,
+        startTime: Instant,
+        endTime: Instant? = null
+    )
+
+    suspend fun saveUserWatchHistory(
+        userId: Long,
+        watchedUserEmail: String,
+        startTime: Instant,
+        endTime: Instant? = null
+    )
+
+    suspend fun getTagWatchHistory(userId: Long): List<TagWatchHistory>
+    suspend fun getUserWatchHistory(userId: Long): List<UserWatchHistory>
 }
 
 class RoomAppRepository(
@@ -132,8 +172,14 @@ class RoomAppRepository(
     private val commentDao: CommentDao,
     private val promptDao: PromptDao,
     private val postVoteDao: PostVoteDao,
-    private val commentVoteDao: CommentVoteDao
+    private val commentVoteDao: CommentVoteDao,
+    private val tagWatchHistoryDao: TagWatchHistoryDao,
+    private val userWatchHistoryDao: UserWatchHistoryDao
 ) : AppRepository {
+    companion object {
+        const val MAX_BIO_LENGTH = 500
+        const val MIN_AGE_YEARS = 18
+    }
 
     override suspend fun registerUser(
         name: String,
@@ -141,13 +187,20 @@ class RoomAppRepository(
         studentId: String,
         password: String
     ): UserProfile {
+        if (name.isBlank() || email.isBlank() || studentId.isBlank() || password.isBlank()) {
+            throw IllegalArgumentException("All fields are required")
+        }
+
         val normalizedEmail = email.lowercase()
+
         if (!normalizedEmail.endsWith("@usc.edu")) {
-            throw IllegalArgumentException("Email must end with @usc.edu")
+            throw IllegalArgumentException("Please use a valid USC email address (@usc.edu)")
         }
+
         if (!studentId.matches(Regex("^\\d{10}\$"))) {
-            throw IllegalArgumentException("Student ID must be a 10-digit number")
+            throw IllegalArgumentException("Student ID must be exactly 10 digits")
         }
+
         val existing = userDao.getByEmail(normalizedEmail)
         if (existing != null) {
             throw IllegalStateException("An account already exists for $normalizedEmail")
@@ -161,12 +214,19 @@ class RoomAppRepository(
             department = "",
             school = "",
             birthDateEpochDay = null,
-            bio = ""
+            bio = "",
+            isProfileComplete = false
         )
 
         val id = userDao.insert(entity)
         return userDao.getById(id)?.toProfile()
             ?: error("User not found after registration")
+    }
+
+    override suspend fun getUserByEmail(email: String): UserProfile? {
+        val normalizedEmail = email.lowercase()
+        val entity = userDao.getByEmail(normalizedEmail)
+        return entity?.toProfile()
     }
 
     override suspend fun completeProfile(
@@ -176,10 +236,24 @@ class RoomAppRepository(
         birthDate: LocalDate?,
         bio: String
     ): UserProfile {
-        val existing = userDao.getById(userId) ?: throw IllegalArgumentException("User not found")
+        val existing = userDao.getById(userId)
+            ?: throw IllegalArgumentException("User not found")
+
         if (department.isBlank() || school.isBlank()) {
-            throw IllegalArgumentException("Affiliation fields cannot be blank")
+            throw IllegalArgumentException("Please complete all required fields")
         }
+
+        if (bio.length > MAX_BIO_LENGTH) {
+            throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
+        }
+
+        if (birthDate != null) {
+            val age = Period.between(birthDate, LocalDate.now()).years
+            if (age < MIN_AGE_YEARS) {
+                throw IllegalArgumentException("You must be 18 or older")
+            }
+        }
+
         if (existing.department.isNotBlank() || existing.school.isNotBlank()) {
             if (existing.department != department.trim() || existing.school != school.trim()) {
                 throw IllegalStateException("Affiliation cannot be changed after profile creation")
@@ -190,7 +264,8 @@ class RoomAppRepository(
             department = department.trim(),
             school = school.trim(),
             birthDateEpochDay = birthDate.toEpochDayOrNull(),
-            bio = bio.trim()
+            bio = bio.trim(),
+            isProfileComplete = true
         )
 
         userDao.update(updated)
@@ -207,8 +282,25 @@ class RoomAppRepository(
         }
     }
 
-    override suspend fun updateProfile(userId: Long, birthDate: LocalDate?, bio: String): UserProfile {
-        val existing = userDao.getById(userId) ?: throw IllegalArgumentException("User not found")
+    override suspend fun updateProfile(
+        userId: Long,
+        birthDate: LocalDate?,
+        bio: String
+    ): UserProfile {
+        val existing = userDao.getById(userId)
+            ?: throw IllegalArgumentException("User not found")
+
+        if (bio.length > MAX_BIO_LENGTH) {
+            throw IllegalArgumentException("Bio must not exceed $MAX_BIO_LENGTH characters")
+        }
+
+        if (birthDate != null) {
+            val age = Period.between(birthDate, LocalDate.now()).years
+            if (age < MIN_AGE_YEARS) {
+                throw IllegalArgumentException("You must be 18 or older")
+            }
+        }
+
         val updated = existing.copy(
             birthDateEpochDay = birthDate.toEpochDayOrNull(),
             bio = bio.trim()
@@ -260,7 +352,21 @@ class RoomAppRepository(
         }
     }
 
-    override suspend fun createPost(authorId: Long, title: String, body: String, tag: String): Long {
+    override suspend fun createPost(
+        authorId: Long,
+        title: String,
+        body: String,
+        tag: String,
+        isPublished: Boolean
+    ): Long {
+        if (title.isBlank() || body.isBlank()) {
+            throw IllegalArgumentException("Title and body are required")
+        }
+
+        if (tag.isBlank()) {
+            throw IllegalArgumentException("Please select an LLM tag")
+        }
+
         val now = System.currentTimeMillis()
         val entity = PostEntity(
             authorId = authorId,
@@ -268,17 +374,50 @@ class RoomAppRepository(
             body = body.trim(),
             tag = tag.trim(),
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isPublished = isPublished,
+            isEdited = false
         )
         return postDao.insert(entity)
     }
 
-    override suspend fun updatePost(postId: Long, title: String, body: String, tag: String) {
-        val existing = postDao.getById(postId) ?: throw IllegalArgumentException("Post not found")
+    override suspend fun updatePost(
+        postId: Long,
+        title: String,
+        body: String,
+        tag: String
+    ) {
+        val existing = postDao.getById(postId)
+            ?: throw IllegalArgumentException("Post not found")
+
+        if (title.isBlank() || body.isBlank()) {
+            throw IllegalArgumentException("Title and body are required")
+        }
+
+        if (tag.isBlank()) {
+            throw IllegalArgumentException("Please select an LLM tag")
+        }
+
         val updated = existing.copy(
             title = title.trim(),
             body = body.trim(),
             tag = tag.trim(),
+            updatedAt = System.currentTimeMillis(),
+            isEdited = true
+        )
+        postDao.update(updated)
+    }
+
+    override suspend fun deletePost(postId: Long) {
+        postDao.delete(postId)
+    }
+
+    override suspend fun publishDraft(postId: Long) {
+        val existing = postDao.getById(postId)
+            ?: throw IllegalArgumentException("Post not found")
+
+        val updated = existing.copy(
+            isPublished = true,
             updatedAt = System.currentTimeMillis()
         )
         postDao.update(updated)
@@ -290,6 +429,10 @@ class RoomAppRepository(
         title: String?,
         body: String
     ): Long {
+        if (body.isBlank()) {
+            throw IllegalArgumentException("Comment cannot be empty")
+        }
+
         val now = System.currentTimeMillis()
         val entity = CommentEntity(
             postId = postId,
@@ -297,17 +440,29 @@ class RoomAppRepository(
             title = title?.takeIf { it.isNotBlank() }?.trim(),
             body = body.trim(),
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isEdited = false
         )
         return commentDao.insert(entity)
     }
 
-    override suspend fun updateComment(commentId: Long, title: String?, body: String) {
-        val existing = commentDao.getById(commentId) ?: throw IllegalArgumentException("Comment not found")
+    override suspend fun updateComment(
+        commentId: Long,
+        title: String?,
+        body: String
+    ) {
+        val existing = commentDao.getById(commentId)
+            ?: throw IllegalArgumentException("Comment not found")
+
+        if (body.isBlank()) {
+            throw IllegalArgumentException("Comment cannot be empty")
+        }
+
         val updated = existing.copy(
             title = title?.takeIf { it.isNotBlank() }?.trim(),
             body = body.trim(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            isEdited = true
         )
         commentDao.update(updated)
     }
@@ -322,6 +477,7 @@ class RoomAppRepository(
                     value = value
                 )
             )
+
             else -> throw IllegalArgumentException("Vote must be -1, 0, or 1")
         }
     }
@@ -336,6 +492,7 @@ class RoomAppRepository(
                     value = value
                 )
             )
+
             else -> throw IllegalArgumentException("Vote must be -1, 0, or 1")
         }
     }
@@ -345,8 +502,16 @@ class RoomAppRepository(
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean
     ): Long {
+        if (title.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("Title, content, and AI model are required")
+        }
+
         val now = System.currentTimeMillis()
         val entity = PromptEntity(
             authorId = authorId,
@@ -354,8 +519,12 @@ class RoomAppRepository(
             description = description.trim(),
             content = content.trim(),
             tag = tag.trim(),
+            temperature = temperature?.trim()?.takeIf { it.isNotBlank() },
+            context = context?.trim()?.takeIf { it.isNotBlank() },
+            memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
             createdAt = now,
-            updatedAt = now
+            updatedAt = now,
+            isPrivate = isPrivate
         )
         return promptDao.insert(entity)
     }
@@ -365,21 +534,98 @@ class RoomAppRepository(
         title: String,
         description: String,
         content: String,
-        tag: String
+        tag: String,
+        temperature: String?,
+        context: String?,
+        memoryTokens: String?,
+        isPrivate: Boolean
     ) {
-        val existing = promptDao.getById(promptId) ?: throw IllegalArgumentException("Prompt not found")
+        val existing = promptDao.getById(promptId)
+            ?: throw IllegalArgumentException("Prompt not found")
+
+        if (title.isBlank() || content.isBlank() || tag.isBlank()) {
+            throw IllegalArgumentException("Title, content, and AI model are required")
+        }
+
         val updated = existing.copy(
             title = title.trim(),
             description = description.trim(),
             content = content.trim(),
             tag = tag.trim(),
-            updatedAt = System.currentTimeMillis()
+            temperature = temperature?.trim()?.takeIf { it.isNotBlank() },
+            context = context?.trim()?.takeIf { it.isNotBlank() },
+            memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
+            updatedAt = System.currentTimeMillis(),
+            isPrivate = isPrivate
         )
         promptDao.update(updated)
     }
 
     override suspend fun deletePrompt(promptId: Long) {
         promptDao.delete(promptId)
+    }
+
+    override suspend fun saveTagWatchHistory(
+        userId: Long,
+        tag: String,
+        startTime: Instant,
+        endTime: Instant?
+    ) {
+        val entity = TagWatchHistoryEntity(
+            userId = userId,
+            tag = tag,
+            startTime = startTime.toEpochMilli(),
+            endTime = endTime?.toEpochMilli()
+        )
+
+        val existing = tagWatchHistoryDao.getByUserId(userId).find { it.tag == tag }
+        if (existing != null) {
+            tagWatchHistoryDao.update(entity.copy(id = existing.id))
+        } else {
+            tagWatchHistoryDao.insert(entity)
+        }
+    }
+
+    override suspend fun saveUserWatchHistory(
+        userId: Long,
+        watchedUserEmail: String,
+        startTime: Instant,
+        endTime: Instant?
+    ) {
+        val entity = UserWatchHistoryEntity(
+            userId = userId,
+            watchedUserEmail = watchedUserEmail,
+            startTime = startTime.toEpochMilli(),
+            endTime = endTime?.toEpochMilli()
+        )
+
+        val existing =
+            userWatchHistoryDao.getByUserId(userId).find { it.watchedUserEmail == watchedUserEmail }
+        if (existing != null) {
+            userWatchHistoryDao.update(entity.copy(id = existing.id))
+        } else {
+            userWatchHistoryDao.insert(entity)
+        }
+    }
+
+    override suspend fun getTagWatchHistory(userId: Long): List<TagWatchHistory> {
+        return tagWatchHistoryDao.getByUserId(userId).map { entity ->
+            TagWatchHistory(
+                tag = entity.tag,
+                startTime = Instant.ofEpochMilli(entity.startTime),
+                endTime = entity.endTime?.let { Instant.ofEpochMilli(it) }
+            )
+        }
+    }
+
+    override suspend fun getUserWatchHistory(userId: Long): List<UserWatchHistory> {
+        return userWatchHistoryDao.getByUserId(userId).map { entity ->
+            UserWatchHistory(
+                email = entity.watchedUserEmail,
+                startTime = Instant.ofEpochMilli(entity.startTime),
+                endTime = entity.endTime?.let { Instant.ofEpochMilli(it) }
+            )
+        }
     }
 }
 
