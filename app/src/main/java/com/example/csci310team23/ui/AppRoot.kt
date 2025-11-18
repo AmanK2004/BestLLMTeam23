@@ -80,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -230,7 +231,9 @@ private fun LandingScreen(onGetStarted: () -> Unit) {
             )
             Button(
                 onClick = onGetStarted,
-                modifier = Modifier.fillMaxWidth(0.7f)
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .testTag("landing_get_started_button")
             ) {
                 Text("Get Started", style = MaterialTheme.typography.titleMedium)
             }
@@ -294,7 +297,8 @@ private fun AuthScreen(
                         localError = null
                         onModeChange(AuthMode.SIGN_IN)
                     },
-                    label = { Text("Sign In") }
+                    label = { Text("Sign In") },
+                    modifier = Modifier.testTag("auth_sign_in_tab")
                 )
                 FilterChip(
                     selected = authState.mode == AuthMode.REGISTER,
@@ -302,7 +306,8 @@ private fun AuthScreen(
                         localError = null
                         onModeChange(AuthMode.REGISTER)
                     },
-                    label = { Text("Register") }
+                    label = { Text("Register") },
+                    modifier = Modifier.testTag("auth_register_tab")
                 )
             }
 
@@ -324,7 +329,9 @@ private fun AuthScreen(
                 onValueChange = { email = it },
                 label = { Text("USC Email") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(0.9f)
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .testTag("auth_email_field")
             )
             Spacer(Modifier.size(12.dp))
 
@@ -344,7 +351,9 @@ private fun AuthScreen(
                 onValueChange = { password = it },
                 label = { Text("Password") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(0.9f),
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .testTag("auth_password_field"),
                 visualTransformation = PasswordVisualTransformation()
             )
 
@@ -395,7 +404,9 @@ private fun AuthScreen(
                         onRegister(name.trim(), email.trim(), studentId.trim(), password)
                     }
                 },
-                modifier = Modifier.fillMaxWidth(0.9f)
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .testTag("auth_submit_button")
             ) {
                 Text(if (authState.mode == AuthMode.SIGN_IN) "Sign In" else "Register")
             }
@@ -568,7 +579,8 @@ private fun MainScreen(
                         selected = section == selectedSection,
                         onClick = { selectedSection = section },
                         icon = { Icon(icon, contentDescription = section.title) },
-                        label = { Text(section.title) }
+                        label = { Text(section.title) },
+                        modifier = Modifier.testTag("nav_${section.name.lowercase()}")
                     )
                 }
             }
@@ -743,7 +755,9 @@ private fun FeedSection(
 
                         Button(
                             onClick = { showCreatePost = !showCreatePost },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("toggle_create_post_button"),
                             enabled = !isFeedRefreshing
                         ) {
                             Icon(
@@ -1042,11 +1056,13 @@ private fun PromptSection(
 
                 TabRow(selectedTabIndex = selectedTab) {
                     Tab(
+                        modifier = Modifier.testTag("prompts_tab_my"),
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         text = { Text("My Prompts") }
                     )
                     Tab(
+                        modifier = Modifier.testTag("prompts_tab_community"),
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         text = { Text("Community") }
@@ -1071,7 +1087,9 @@ private fun PromptSection(
 
                             Button(
                                 onClick = { showCreatePrompt = !showCreatePrompt },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("toggle_create_prompt_button")
                             ) {
                                 Icon(
                                     if (showCreatePrompt) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
@@ -1193,16 +1211,19 @@ private fun SearchSection(
 
                 TabRow(selectedTabIndex = selectedTab) {
                     Tab(
+                        modifier = Modifier.testTag("search_tab_posts"),
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         text = { Text("Posts") }
                     )
                     Tab(
+                        modifier = Modifier.testTag("search_tab_prompts"),
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         text = { Text("Prompts") }
                     )
                     Tab(
+                        modifier = Modifier.testTag("search_tab_users"),
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
                         text = { Text("Users") }
@@ -1244,7 +1265,8 @@ private fun SearchSection(
                                     },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .menuAnchor(),
+                                        .menuAnchor()
+                                        .testTag("search_post_keyword_field"),
                                     readOnly = false
                                 )
                                 ExposedDropdownMenu(
@@ -1267,7 +1289,9 @@ private fun SearchSection(
                                 value = keyword,
                                 onValueChange = { keyword = it },
                                 label = { Text("Search keyword") },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("search_post_keyword_field")
                             )
                         }
 
@@ -1276,7 +1300,9 @@ private fun SearchSection(
                                 postSearched = true
                                 onSearchPosts(selectedType, keyword)
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search_post_button")
                         ) {
                             Text("Search Posts")
                         }
@@ -1315,7 +1341,8 @@ private fun SearchSection(
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = promptTagExpanded) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .menuAnchor(),
+                                    .menuAnchor()
+                                    .testTag("search_prompt_tag_field"),
                                 readOnly = false
                             )
                             ExposedDropdownMenu(
@@ -1338,7 +1365,9 @@ private fun SearchSection(
                                 promptSearched = true
                                 onSearchPrompts(promptTag)
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search_prompt_button")
                         ) {
                             Text("Search Public Prompts")
                         }
@@ -1373,14 +1402,18 @@ private fun SearchSection(
                             value = userEmail,
                             onValueChange = { userEmail = it },
                             label = { Text("USC Email") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search_user_email_field")
                         )
                         Button(
                             onClick = {
                                 userSearched = true
                                 onSearchUsers(userEmail)
                             },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("search_user_button")
                         ) {
                             Text("Search Users")
                         }
@@ -1495,7 +1528,10 @@ private fun ProfileSection(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        IconButton(onClick = { showEditProfile = !showEditProfile }) {
+                        IconButton(
+                            onClick = { showEditProfile = !showEditProfile },
+                            modifier = Modifier.testTag("profile_edit_toggle")
+                        ) {
                             Icon(
                                 if (showEditProfile) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                                 contentDescription = null
@@ -1514,7 +1550,9 @@ private fun ProfileSection(
                                         datePickerDialog.show()
                                         birthDateError = null
                                     },
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("edit_profile_birthdate_button")
                                 ) {
                                     Text(birthDate?.toString() ?: "Select Birth Date")
                                 }
@@ -1535,6 +1573,7 @@ private fun ProfileSection(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 120.dp)
+                                    .testTag("edit_profile_bio_field")
                             )
 
                             Button(
@@ -1553,7 +1592,9 @@ private fun ProfileSection(
                                     onUpdateProfile(birthDate, bio.trim())
                                     message = "Profile updated"
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("edit_profile_save_button")
                             ) {
                                 Text("Save Changes")
                             }
@@ -1576,7 +1617,10 @@ private fun ProfileSection(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        IconButton(onClick = { showDisplaySettings = !showDisplaySettings }) {
+                        IconButton(
+                            onClick = { showDisplaySettings = !showDisplaySettings },
+                            modifier = Modifier.testTag("profile_display_toggle")
+                        ) {
                             Icon(
                                 if (showDisplaySettings) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                                 contentDescription = null
@@ -1600,7 +1644,8 @@ private fun ProfileSection(
                                     onCheckedChange = { newValue ->
                                         showCommentTitles = newValue
                                         viewModel.setShowCommentTitles(newValue)
-                                    }
+                                    },
+                                    modifier = Modifier.testTag("profile_display_show_comment_titles")
                                 )
                             }
                             Text(
@@ -1627,7 +1672,10 @@ private fun ProfileSection(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
-                        IconButton(onClick = { showEditPassword = !showEditPassword }) {
+                        IconButton(
+                            onClick = { showEditPassword = !showEditPassword },
+                            modifier = Modifier.testTag("profile_password_toggle")
+                        ) {
                             Icon(
                                 if (showEditPassword) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                                 contentDescription = null
@@ -1644,7 +1692,9 @@ private fun ProfileSection(
                                 value = newPassword,
                                 onValueChange = { newPassword = it },
                                 label = { Text("New Password") },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("profile_new_password_field"),
                                 visualTransformation = PasswordVisualTransformation()
                             )
 
@@ -1652,7 +1702,9 @@ private fun ProfileSection(
                                 value = confirmPassword,
                                 onValueChange = { confirmPassword = it },
                                 label = { Text("Confirm Password") },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("profile_confirm_password_field"),
                                 visualTransformation = PasswordVisualTransformation()
                             )
 
@@ -1671,7 +1723,9 @@ private fun ProfileSection(
                                     confirmPassword = ""
                                     message = "Password updated"
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("profile_update_password_button")
                             ) {
                                 Text("Update Password")
                             }
@@ -1740,7 +1794,8 @@ private fun ProfileSection(
                 Text(
                     msg,
                     color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.testTag("profile_status_message")
                 )
             }
         }
@@ -1759,7 +1814,11 @@ private fun CreatePostCard(
     var error by remember { mutableStateOf<String?>(null) }
     var tagExpanded by remember { mutableStateOf(false) }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("comment_card")
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1774,7 +1833,9 @@ private fun CreatePostCard(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("Post Title") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_post_title_field"),
                 singleLine = true
             )
 
@@ -1789,7 +1850,8 @@ private fun CreatePostCard(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor()
+                        .testTag("create_post_tag_field"),
                     readOnly = false
                 )
                 ExposedDropdownMenu(
@@ -1814,7 +1876,8 @@ private fun CreatePostCard(
                 label = { Text("Share your experience with this AI...") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 120.dp),
+                    .heightIn(min = 120.dp)
+                    .testTag("create_post_body_field"),
                 maxLines = 8
             )
 
@@ -1824,7 +1887,8 @@ private fun CreatePostCard(
             ) {
                 Checkbox(
                     checked = isDraft,
-                    onCheckedChange = { isDraft = it }
+                    onCheckedChange = { isDraft = it },
+                    modifier = Modifier.testTag("create_post_draft_checkbox")
                 )
                 Text("Save as Draft (not visible to others)")
             }
@@ -1849,7 +1913,9 @@ private fun CreatePostCard(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_post_submit_button")
             ) {
                 Text(if (isDraft) "Save Draft" else "Publish Post")
             }
@@ -1881,7 +1947,7 @@ private fun PostCard(
     var editPostTag by remember { mutableStateOf(post.tag) }
     var editPostBody by remember { mutableStateOf(post.body) }
 
-    BaseContentCard {
+    BaseContentCard(modifier = Modifier.testTag("post_card")) {
         Row(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1900,7 +1966,8 @@ private fun PostCard(
                     if (!post.isPublished) {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
-                            shape = MaterialTheme.shapes.small
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.testTag("post_draft_badge")
                         ) {
                             Text(
                                 text = "DRAFT",
@@ -1941,7 +2008,9 @@ private fun PostCard(
                     Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = { showMenu = true },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("post_menu_button")
                     ) {
                         Icon(
                             Icons.Filled.MoreVert,
@@ -2013,7 +2082,10 @@ private fun PostCard(
                 onDownvote = {
                     val newValue: Int = if (post.currentUserVote == -1) 0 else -1
                     onVotePost(post.id, newValue)
-                }
+                },
+                modifier = Modifier.testTag("post_vote_row"),
+                upvoteTag = "post_upvote_button",
+                downvoteTag = "post_downvote_button"
             )
         }
 
@@ -2022,7 +2094,8 @@ private fun PostCard(
             Text(
                 text = "Comments (${post.comments.size})",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.testTag("post_comments_header")
             )
 
             post.comments.forEach { comment ->
@@ -2039,7 +2112,9 @@ private fun PostCard(
             Spacer(modifier = Modifier.size(8.dp))
             Button(
                 onClick = { showCommentComposer = !showCommentComposer },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("post_comment_toggle_button")
             ) {
                 Icon(
                     if (showCommentComposer) Icons.Filled.KeyboardArrowUp else Icons.Filled.Add,
@@ -2059,7 +2134,9 @@ private fun PostCard(
                         value = commentTitle,
                         onValueChange = { commentTitle = it },
                         label = { Text("Comment Title (optional)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("comment_title_field")
                     )
                     OutlinedTextField(
                         value = commentBody,
@@ -2068,18 +2145,22 @@ private fun PostCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 80.dp)
+                            .testTag("comment_body_field")
                     )
-                    Button(onClick = {
-                        if (commentBody.isBlank()) return@Button
-                        onCreateComment(
-                            post.id,
-                            commentTitle.takeIf { it.isNotBlank() }?.trim(),
-                            commentBody.trim()
-                        )
-                        commentTitle = ""
-                        commentBody = ""
-                        showCommentComposer = false
-                    }) {
+                    Button(
+                        onClick = {
+                            if (commentBody.isBlank()) return@Button
+                            onCreateComment(
+                                post.id,
+                                commentTitle.takeIf { it.isNotBlank() }?.trim(),
+                                commentBody.trim()
+                            )
+                            commentTitle = ""
+                            commentBody = ""
+                            showCommentComposer = false
+                        },
+                        modifier = Modifier.testTag("comment_submit_button")
+                    ) {
                         Text("Post Comment")
                     }
                 }
@@ -2107,10 +2188,13 @@ private fun PostCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             confirmButton = {
-                TextButton(onClick = {
-                    onDeletePost(post.id)
-                    showDeleteDialog = false
-                }) {
+                TextButton(
+                    onClick = {
+                        onDeletePost(post.id)
+                        showDeleteDialog = false
+                    },
+                    modifier = Modifier.testTag("delete_post_confirm_button")
+                ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -2141,17 +2225,20 @@ private fun EditPostDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = {
-                when {
-                    title.isBlank() -> error = "Title is required"
-                    tag.isBlank() -> error = "AI Model is required"
-                    body.isBlank() -> error = "Post content is required"
-                    else -> {
-                        error = null
-                        onSave()
+            TextButton(
+                onClick = {
+                    when {
+                        title.isBlank() -> error = "Title is required"
+                        tag.isBlank() -> error = "AI Model is required"
+                        body.isBlank() -> error = "Post content is required"
+                        else -> {
+                            error = null
+                            onSave()
+                        }
                     }
-                }
-            }) { Text("Save") }
+                },
+                modifier = Modifier.testTag("edit_post_save_button")
+            ) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -2163,7 +2250,9 @@ private fun EditPostDialog(
                     value = title,
                     onValueChange = onTitleChange,
                     label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("edit_post_title_field")
                 )
                 ExposedDropdownMenuBox(
                     expanded = tagExpanded,
@@ -2177,6 +2266,7 @@ private fun EditPostDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .menuAnchor()
+                            .testTag("edit_post_tag_field")
                     )
                     ExposedDropdownMenu(
                         expanded = tagExpanded,
@@ -2200,6 +2290,7 @@ private fun EditPostDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 160.dp)
+                        .testTag("edit_post_body_field")
                 )
                 error?.let {
                     Text(
@@ -2269,7 +2360,9 @@ private fun CommentCard(
                 if (currentUser?.id == comment.author.id) {
                     IconButton(
                         onClick = { showMenu = true },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("comment_menu_button")
                     ) {
                         Icon(
                             Icons.Filled.MoreVert,
@@ -2306,7 +2399,10 @@ private fun CommentCard(
                 onDownvote = {
                     val newValue: Int = if (comment.currentUserVote == -1) 0 else -1
                     onVoteComment(comment.id, newValue)
-                }
+                },
+                modifier = Modifier.testTag("comment_vote_row"),
+                upvoteTag = "comment_upvote_button",
+                downvoteTag = "comment_downvote_button"
             )
         }
     }
@@ -2315,12 +2411,15 @@ private fun CommentCard(
         AlertDialog(
             onDismissRequest = { showEdit = false },
             confirmButton = {
-                TextButton(onClick = {
-                    val titleToSave: String? =
-                        if (editTitle.isNotBlank()) editTitle.trim() else null
-                    onUpdateComment(comment.id, titleToSave, editBody.trim())
-                    showEdit = false
-                }) {
+                TextButton(
+                    onClick = {
+                        val titleToSave: String? =
+                            if (editTitle.isNotBlank()) editTitle.trim() else null
+                        onUpdateComment(comment.id, titleToSave, editBody.trim())
+                        showEdit = false
+                    },
+                    modifier = Modifier.testTag("edit_comment_save_button")
+                ) {
                     Text("Save")
                 }
             },
@@ -2336,7 +2435,9 @@ private fun CommentCard(
                         value = editTitle,
                         onValueChange = { newValue: String -> editTitle = newValue },
                         label = { Text("Title (optional)") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("edit_comment_title_field")
                     )
                     OutlinedTextField(
                         value = editBody,
@@ -2345,6 +2446,7 @@ private fun CommentCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 120.dp)
+                            .testTag("edit_comment_body_field")
                     )
                 }
             }
@@ -2357,14 +2459,22 @@ private fun VoteRow(
     score: Int,
     currentVote: Int?,
     onUpvote: () -> Unit,
-    onDownvote: () -> Unit
+    onDownvote: () -> Unit,
+    modifier: Modifier = Modifier,
+    upvoteTag: String = "",
+    downvoteTag: String = ""
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onUpvote, modifier = Modifier.size(32.dp)) {
+        IconButton(
+            onClick = onUpvote,
+            modifier = Modifier
+                .size(32.dp)
+                .let { base -> if (upvoteTag.isNotBlank()) base.testTag(upvoteTag) else base }
+        ) {
             Icon(
                 imageVector = Icons.Filled.ThumbUp,
                 contentDescription = "Upvote",
@@ -2373,7 +2483,12 @@ private fun VoteRow(
             )
         }
         Text(score.toString(), style = MaterialTheme.typography.bodyMedium)
-        IconButton(onClick = onDownvote, modifier = Modifier.size(32.dp)) {
+        IconButton(
+            onClick = onDownvote,
+            modifier = Modifier
+                .size(32.dp)
+                .let { base -> if (downvoteTag.isNotBlank()) base.testTag(downvoteTag) else base }
+        ) {
             Icon(
                 imageVector = Icons.Filled.ThumbDown,
                 contentDescription = "Downvote",
@@ -2416,14 +2531,18 @@ private fun CreatePromptCard(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("Prompt Title") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_prompt_title_field"),
                 singleLine = true
             )
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
                 label = { Text("Brief Description") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_prompt_description_field"),
                 maxLines = 2
             )
             OutlinedTextField(
@@ -2432,7 +2551,8 @@ private fun CreatePromptCard(
                 label = { Text("Prompt Text (the actual prompt to use)") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 120.dp),
+                    .heightIn(min = 120.dp)
+                    .testTag("create_prompt_content_field"),
                 maxLines = 8
             )
 
@@ -2447,7 +2567,8 @@ private fun CreatePromptCard(
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .menuAnchor(),
+                        .menuAnchor()
+                        .testTag("create_prompt_tag_field"),
                     readOnly = false
                 )
                 ExposedDropdownMenu(
@@ -2468,7 +2589,9 @@ private fun CreatePromptCard(
 
             OutlinedButton(
                 onClick = { showOptional = !showOptional },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_prompt_optional_toggle")
             ) {
                 Icon(
                     if (showOptional) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
@@ -2485,21 +2608,27 @@ private fun CreatePromptCard(
                         value = temperature,
                         onValueChange = { temperature = it },
                         label = { Text("Temperature (e.g., 0.7)") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("create_prompt_temperature_field"),
                         singleLine = true
                     )
                     OutlinedTextField(
                         value = context,
                         onValueChange = { context = it },
                         label = { Text("Context") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("create_prompt_context_field"),
                         maxLines = 3
                     )
                     OutlinedTextField(
                         value = memoryTokens,
                         onValueChange = { memoryTokens = it },
                         label = { Text("Memory Tokens") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("create_prompt_memory_field"),
                         singleLine = true
                     )
                 }
@@ -2511,7 +2640,8 @@ private fun CreatePromptCard(
             ) {
                 Checkbox(
                     checked = isPrivate,
-                    onCheckedChange = { isPrivate = it }
+                    onCheckedChange = { isPrivate = it },
+                    modifier = Modifier.testTag("create_prompt_private_checkbox")
                 )
                 Text("Keep Private (only you can see)")
             }
@@ -2545,7 +2675,9 @@ private fun CreatePromptCard(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("create_prompt_submit_button")
             ) {
                 Text(if (isPrivate) "Save Private Prompt" else "Share Prompt")
             }
@@ -2590,7 +2722,8 @@ private fun PromptCard(
                     if (prompt.isPrivate) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
-                            shape = MaterialTheme.shapes.small
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.testTag("prompt_private_badge")
                         ) {
                             Text(
                                 text = "PRIVATE",
@@ -2621,7 +2754,9 @@ private fun PromptCard(
                     Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = { showMenu = true },
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("prompt_menu_button")
                     ) {
                         Icon(
                             Icons.Filled.MoreVert,
@@ -2725,10 +2860,13 @@ private fun PromptCard(
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             confirmButton = {
-                TextButton(onClick = {
-                    onDeletePrompt(prompt.id)
-                    showDeleteDialog = false
-                }) {
+                TextButton(
+                    onClick = {
+                        onDeletePrompt(prompt.id)
+                        showDeleteDialog = false
+                    },
+                    modifier = Modifier.testTag("delete_prompt_confirm_button")
+                ) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
@@ -2763,26 +2901,29 @@ private fun EditPromptDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = {
-                when {
-                    title.isBlank() -> error = "Title is required"
-                    content.isBlank() -> error = "Prompt text is required"
-                    tag.isBlank() -> error = "AI Model is required"
-                    else -> {
-                        error = null
-                        onSave(
-                            title.trim(),
-                            description.trim(),
-                            content.trim(),
-                            tag.trim(),
-                            temperature.takeIf { it.isNotBlank() }?.trim(),
-                            context.takeIf { it.isNotBlank() }?.trim(),
-                            memoryTokens.takeIf { it.isNotBlank() }?.trim(),
-                            isPrivate
-                        )
+            TextButton(
+                onClick = {
+                    when {
+                        title.isBlank() -> error = "Title is required"
+                        content.isBlank() -> error = "Prompt text is required"
+                        tag.isBlank() -> error = "AI Model is required"
+                        else -> {
+                            error = null
+                            onSave(
+                                title.trim(),
+                                description.trim(),
+                                content.trim(),
+                                tag.trim(),
+                                temperature.takeIf { it.isNotBlank() }?.trim(),
+                                context.takeIf { it.isNotBlank() }?.trim(),
+                                memoryTokens.takeIf { it.isNotBlank() }?.trim(),
+                                isPrivate
+                            )
+                        }
                     }
-                }
-            }) { Text("Save") }
+                },
+                modifier = Modifier.testTag("edit_prompt_save_button")
+            ) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
@@ -2798,7 +2939,9 @@ private fun EditPromptDialog(
                         value = title,
                         onValueChange = { title = it },
                         label = { Text("Title") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("edit_prompt_title_field")
                     )
                 }
                 item {
@@ -2806,7 +2949,9 @@ private fun EditPromptDialog(
                         value = description,
                         onValueChange = { description = it },
                         label = { Text("Description") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("edit_prompt_description_field")
                     )
                 }
                 item {
@@ -2817,6 +2962,7 @@ private fun EditPromptDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 120.dp)
+                            .testTag("edit_prompt_content_field")
                     )
                 }
                 item {
@@ -2832,6 +2978,7 @@ private fun EditPromptDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .menuAnchor()
+                                .testTag("edit_prompt_tag_field")
                         )
                         ExposedDropdownMenu(
                             expanded = tagExpanded,
@@ -2865,7 +3012,9 @@ private fun EditPromptDialog(
                             value = temperature,
                             onValueChange = { temperature = it },
                             label = { Text("Temperature (optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("edit_prompt_temperature_field")
                         )
                     }
                     item {
@@ -2873,7 +3022,9 @@ private fun EditPromptDialog(
                             value = context,
                             onValueChange = { context = it },
                             label = { Text("Context (optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("edit_prompt_context_field")
                         )
                     }
                     item {
@@ -2881,7 +3032,9 @@ private fun EditPromptDialog(
                             value = memoryTokens,
                             onValueChange = { memoryTokens = it },
                             label = { Text("Memory Tokens (optional)") },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("edit_prompt_memory_field")
                         )
                     }
                 }
@@ -2893,7 +3046,8 @@ private fun EditPromptDialog(
                     ) {
                         Checkbox(
                             checked = isPrivate,
-                            onCheckedChange = { isPrivate = it }
+                            onCheckedChange = { isPrivate = it },
+                            modifier = Modifier.testTag("edit_prompt_private_checkbox")
                         )
                         Text("Keep Private")
                     }
@@ -3018,7 +3172,7 @@ private fun PromptSearchCard(
 
 @Composable
 private fun PostSummaryCard(post: Post) {
-    BaseContentCard {
+    BaseContentCard(modifier = Modifier.testTag("post_summary_card")) {
         Text(
             text = post.title,
             style = MaterialTheme.typography.titleMedium,

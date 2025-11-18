@@ -165,13 +165,6 @@ class AppViewModel(
 
         val emailToUserIdMap = allUsers.associate { it.email to it.id }
 
-        val currentlyWatchedUserIds = watchedUsersHistory
-            .filter { it.endTime == null }
-            .mapNotNull { userHistory ->
-                emailToUserIdMap[userHistory.email]
-            }
-            .toSet()
-
         val watchedUserPosts = allPosts.filter { post ->
             post.isPublished && watchedUsersHistory.any { userHistory ->
                 val postUserId = post.author.id
@@ -200,11 +193,6 @@ class AppViewModel(
             }
         }
 
-        println("DEBUG: Feed filtering - User posts: ${userPosts.size}")
-        println("DEBUG: Feed filtering - Watched user posts: ${watchedUserPosts.size}")
-        println("DEBUG: Feed filtering - Watched tag posts: ${watchedTagPosts.size}")
-        println("DEBUG: Currently watched user IDs: $currentlyWatchedUserIds")
-
         val limitedWatchedUserPosts = watchedUserPosts
             .sortedByDescending { it.createdAt }
             .take(8)
@@ -217,7 +205,6 @@ class AppViewModel(
             .distinctBy { it.id }
             .sortedByDescending { it.createdAt }
 
-        println("DEBUG: Final feed posts: ${combinedPosts.size}")
         return combinedPosts
     }
 
@@ -677,11 +664,6 @@ class AppViewModel(
             )
         }
 
-        println("DEBUG: Building posts - total users: ${userProfiles.size}")
-        userProfiles.forEach { (id, profile) ->
-            println("DEBUG: User $id: ${profile.name} (${profile.email})")
-        }
-
         val commentVotes = snapshot.commentVotes.groupBy { it.commentId }
         val postVotes = snapshot.postVotes.groupBy { it.postId }
         val commentsByPost = snapshot.comments.groupBy { it.postId }
@@ -703,12 +685,8 @@ class AppViewModel(
                 votes.firstOrNull { it.userId == id }?.value
             }
 
-            println("DEBUG: Post ${post.id} by ${author.email} (${author.name}) - tag: ${post.tag}")
-
             post.toDomain(author, postComments, summary, currentVote)
         }
-
-        println("DEBUG: Built ${posts.size} posts total")
         return posts
     }
 
