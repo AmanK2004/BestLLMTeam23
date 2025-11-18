@@ -5,6 +5,8 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
 android {
     namespace = "com.example.csci310team23"
     compileSdk = 36
@@ -40,6 +42,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+}
+
+tasks.withType<Test> {
+    testLogging {
+        events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
     }
 }
 
