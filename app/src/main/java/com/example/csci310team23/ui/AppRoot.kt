@@ -113,7 +113,8 @@ private val AI_AGENTS = listOf(
     "GPT-4 Turbo",
     "Llama 3",
     "Mistral",
-    "Perplexity AI"
+    "Perplexity AI",
+    "Other"
 )
 
 @Composable
