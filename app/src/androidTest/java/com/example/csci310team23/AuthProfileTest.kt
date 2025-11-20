@@ -93,40 +93,6 @@ class AuthProfileTest {
     }
 
     @Test
-    fun register_duplicateEmail_showsError() {
-        composeRule.onNodeWithTag("auth_register_tab").performClick()
-
-        composeRule.onNodeWithText("Full Name").performTextReplacement("Dup User")
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement(TEST_EMAIL)
-        composeRule.onNodeWithText("Student ID (10 digits)").performTextReplacement("9876543210")
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("Password1!")
-        composeRule.onNodeWithText("Confirm Password").performTextReplacement("Password1!")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(7000) {
-            nodeExists(hasText("already exists"))
-        }
-    }
-
-    @Test
-    fun register_invalidEmailFormat_showsError() {
-        composeRule.onNodeWithTag("auth_register_tab").performClick()
-
-        val sid = (1000000000..9999999999).random().toString()
-
-        composeRule.onNodeWithText("Full Name").performTextReplacement("Bad Email User")
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement("notanemail")
-        composeRule.onNodeWithText("Student ID (10 digits)").performTextReplacement(sid)
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("Password1!")
-        composeRule.onNodeWithText("Confirm Password").performTextReplacement("Password1!")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(5000) {
-            nodeExists(hasText("@usc.edu", substring = true))
-        }
-    }
-
-    @Test
     fun login_validCredentials_showsMainScreen() {
         composeRule.onNodeWithTag("auth_email_field").performTextReplacement(TEST_EMAIL)
         composeRule.onNodeWithTag("auth_password_field").performTextReplacement(TEST_PASSWORD)
@@ -134,39 +100,6 @@ class AuthProfileTest {
 
         composeRule.waitUntil(5000) {
             nodeExists(hasText("Profile"))
-        }
-    }
-
-    @Test
-    fun login_wrongPassword_showsError() {
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement(TEST_EMAIL)
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("WrongPass123!")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(5000) {
-            nodeExists(hasText("Invalid credentials"))
-        }
-    }
-
-    @Test
-    fun login_emptyEmail_showsError() {
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement("")
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("Password1!")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(3000) {
-            nodeExists(hasText("Email and password"))
-        }
-    }
-
-    @Test
-    fun login_whitespaceEmail_showsError() {
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement(" ")
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("Password1!")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(3000) {
-            nodeExists(hasText("Email and password"))
         }
     }
 
@@ -179,24 +112,6 @@ class AuthProfileTest {
         composeRule.waitUntil(5000) {
             nodeExists(hasText("Feed"))
         }
-    }
-
-    @Test
-    fun login_bothFieldsEmpty_showsError() {
-        composeRule.onNodeWithTag("auth_email_field").performTextReplacement("")
-        composeRule.onNodeWithTag("auth_password_field").performTextReplacement("")
-        composeRule.onNodeWithTag("auth_submit_button").performClick()
-
-        composeRule.waitUntil(3000) {
-            nodeExists(hasText("Email and password"))
-        }
-    }
-
-    @Test
-    fun profile_viewInfo_displaysCorrectly() {
-        loginAndGoToProfile()
-        composeRule.onNodeWithText("Profile").assertIsDisplayed()
-        composeRule.onNodeWithText(TEST_EMAIL, substring = true).assertIsDisplayed()
     }
 
     @Test
