@@ -2,7 +2,9 @@ package com.example.csci310team23.data.model
 
 import com.example.csci310team23.data.local.CommentEntity
 import com.example.csci310team23.data.local.PostEntity
+import com.example.csci310team23.data.local.PostVersionEntity
 import com.example.csci310team23.data.local.PromptEntity
+import com.example.csci310team23.data.local.PromptVersionEntity
 import com.example.csci310team23.data.local.UserEntity
 
 fun UserEntity.toProfile(): UserProfile = UserProfile(
@@ -21,10 +23,12 @@ fun PostEntity.toDomain(
     author: UserSummary,
     comments: List<Comment>,
     voteSummary: VoteSummary,
-    currentUserVote: Int?
+    currentUserVote: Int?,
+    isBookmarked: Boolean = false
 ): Post = Post(
     id = id,
     author = author,
+    isAnonymous = isAnonymous,
     title = title,
     body = body,
     tag = tag,
@@ -34,6 +38,7 @@ fun PostEntity.toDomain(
     comments = comments,
     voteSummary = voteSummary,
     currentUserVote = currentUserVote,
+    isBookmarked = isBookmarked,
     isPublished = isPublished,
     isEdited = isEdited
 )
@@ -67,5 +72,32 @@ fun PromptEntity.toDomain(author: UserSummary): Prompt = Prompt(
     memoryTokens = memoryTokens,
     createdAt = createdAt.toInstant(),
     updatedAt = updatedAt.toInstant(),
-    isPrivate = isPrivate
+    isPrivate = isPrivate,
+    isBookmarked = false,
+    isEdited = isEdited
+)
+
+fun PromptEntity.toDomain(author: UserSummary, isBookmarked: Boolean): Prompt =
+    toDomain(author).copy(isBookmarked = isBookmarked)
+
+fun PostVersionEntity.toDomain(): PostVersion = PostVersion(
+    id = id,
+    postId = postId,
+    title = title,
+    body = body,
+    tag = tag,
+    createdAt = createdAt.toInstant()
+)
+
+fun PromptVersionEntity.toDomain(): PromptVersion = PromptVersion(
+    id = id,
+    promptId = promptId,
+    title = title,
+    description = description,
+    content = content,
+    tag = tag,
+    temperature = temperature,
+    context = context,
+    memoryTokens = memoryTokens,
+    createdAt = createdAt.toInstant()
 )

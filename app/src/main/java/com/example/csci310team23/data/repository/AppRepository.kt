@@ -4,12 +4,20 @@ import com.example.csci310team23.data.local.CommentDao
 import com.example.csci310team23.data.local.CommentEntity
 import com.example.csci310team23.data.local.CommentVoteDao
 import com.example.csci310team23.data.local.CommentVoteEntity
+import com.example.csci310team23.data.local.PostBookmarkDao
+import com.example.csci310team23.data.local.PostBookmarkEntity
 import com.example.csci310team23.data.local.PostDao
 import com.example.csci310team23.data.local.PostEntity
+import com.example.csci310team23.data.local.PostVersionDao
+import com.example.csci310team23.data.local.PostVersionEntity
 import com.example.csci310team23.data.local.PostVoteDao
 import com.example.csci310team23.data.local.PostVoteEntity
+import com.example.csci310team23.data.local.PromptBookmarkDao
+import com.example.csci310team23.data.local.PromptBookmarkEntity
 import com.example.csci310team23.data.local.PromptDao
 import com.example.csci310team23.data.local.PromptEntity
+import com.example.csci310team23.data.local.PromptVersionDao
+import com.example.csci310team23.data.local.PromptVersionEntity
 import com.example.csci310team23.data.local.TagWatchHistoryDao
 import com.example.csci310team23.data.local.TagWatchHistoryEntity
 import com.example.csci310team23.data.local.UserDao
@@ -36,15 +44,11 @@ data class AppDataSnapshot(
     val comments: List<CommentEntity>,
     val prompts: List<PromptEntity>,
     val postVotes: List<PostVoteEntity>,
-    val commentVotes: List<CommentVoteEntity>
-)
-
-private data class PartialSnapshot(
-    val users: List<UserEntity>,
-    val posts: List<PostEntity>,
-    val comments: List<CommentEntity>,
-    val prompts: List<PromptEntity>,
-    val postVotes: List<PostVoteEntity>
+    val commentVotes: List<CommentVoteEntity>,
+    val postBookmarks: List<PostBookmarkEntity>,
+    val promptBookmarks: List<PromptBookmarkEntity>,
+    val postVersions: List<PostVersionEntity>,
+    val promptVersions: List<PromptVersionEntity>
 )
 
 interface AppRepository {
@@ -84,6 +88,7 @@ interface AppRepository {
         title: String,
         body: String,
         tag: String,
+        isAnonymous: Boolean = false,
         isPublished: Boolean = true
     ): Long
 
@@ -91,7 +96,8 @@ interface AppRepository {
         postId: Long,
         title: String,
         body: String,
-        tag: String
+        tag: String,
+        isAnonymous: Boolean
     )
 
     suspend fun deletePost(postId: Long)
@@ -148,6 +154,10 @@ interface AppRepository {
     )
 
     suspend fun deletePrompt(promptId: Long)
+
+    suspend fun togglePostBookmark(userId: Long, postId: Long): Boolean
+    suspend fun togglePromptBookmark(userId: Long, promptId: Long): Boolean
+
     suspend fun saveTagWatchHistory(
         userId: Long,
         tag: String,
@@ -174,7 +184,11 @@ class RoomAppRepository(
     private val postVoteDao: PostVoteDao,
     private val commentVoteDao: CommentVoteDao,
     private val tagWatchHistoryDao: TagWatchHistoryDao,
-    private val userWatchHistoryDao: UserWatchHistoryDao
+    private val userWatchHistoryDao: UserWatchHistoryDao,
+    private val postBookmarkDao: PostBookmarkDao,
+    private val promptBookmarkDao: PromptBookmarkDao,
+    private val postVersionDao: PostVersionDao,
+    private val promptVersionDao: PromptVersionDao
 ) : AppRepository {
     companion object {
         const val MAX_BIO_LENGTH = 500
@@ -323,32 +337,50 @@ class RoomAppRepository(
         val promptsFlow = promptDao.observeAll()
         val postVotesFlow = postVoteDao.observeAll()
         val commentVotesFlow = commentVoteDao.observeAll()
+        val postBookmarksFlow = postBookmarkDao.observeAll()
+        val promptBookmarksFlow = promptBookmarkDao.observeAll()
+        val postVersionsFlow = postVersionDao.observeAll()
+        val promptVersionsFlow = promptVersionDao.observeAll()
 
-        val partialFlow = combine(
+        val baseSnapshot = combine(
             usersFlow,
             postsFlow,
             commentsFlow,
             promptsFlow,
             postVotesFlow
         ) { users, posts, comments, prompts, postVotes ->
-            PartialSnapshot(
+            AppDataSnapshot(
                 users = users,
                 posts = posts,
                 comments = comments,
                 prompts = prompts,
-                postVotes = postVotes
+                postVotes = postVotes,
+                commentVotes = emptyList(),
+                postBookmarks = emptyList(),
+                promptBookmarks = emptyList(),
+                postVersions = emptyList(),
+                promptVersions = emptyList()
             )
         }
 
-        return combine(partialFlow, commentVotesFlow) { partial, commentVotes ->
-            AppDataSnapshot(
-                users = partial.users,
-                posts = partial.posts,
-                comments = partial.comments,
-                prompts = partial.prompts,
-                postVotes = partial.postVotes,
-                commentVotes = commentVotes
-            )
+        val withCommentVotes = combine(baseSnapshot, commentVotesFlow) { snapshot, commentVotes ->
+            snapshot.copy(commentVotes = commentVotes)
+        }
+
+        val withPostBookmarks = combine(withCommentVotes, postBookmarksFlow) { snapshot, postBookmarks ->
+            snapshot.copy(postBookmarks = postBookmarks)
+        }
+
+        val withPromptBookmarks = combine(withPostBookmarks, promptBookmarksFlow) { snapshot, promptBookmarks ->
+            snapshot.copy(promptBookmarks = promptBookmarks)
+        }
+
+        val withPostVersions = combine(withPromptBookmarks, postVersionsFlow) { snapshot, postVersions ->
+            snapshot.copy(postVersions = postVersions)
+        }
+
+        return combine(withPostVersions, promptVersionsFlow) { snapshot, promptVersions ->
+            snapshot.copy(promptVersions = promptVersions)
         }
     }
 
@@ -357,6 +389,7 @@ class RoomAppRepository(
         title: String,
         body: String,
         tag: String,
+        isAnonymous: Boolean,
         isPublished: Boolean
     ): Long {
         if (title.isBlank() || body.isBlank()) {
@@ -375,6 +408,7 @@ class RoomAppRepository(
             tag = tag.trim(),
             createdAt = now,
             updatedAt = now,
+            isAnonymous = isAnonymous,
             isPublished = isPublished,
             isEdited = false
         )
@@ -385,7 +419,8 @@ class RoomAppRepository(
         postId: Long,
         title: String,
         body: String,
-        tag: String
+        tag: String,
+        isAnonymous: Boolean
     ) {
         val existing = postDao.getById(postId)
             ?: throw IllegalArgumentException("Post not found")
@@ -398,11 +433,23 @@ class RoomAppRepository(
             throw IllegalArgumentException("Please select an LLM tag")
         }
 
+        val now = System.currentTimeMillis()
+        postVersionDao.insert(
+            PostVersionEntity(
+                postId = existing.id,
+                title = existing.title,
+                body = existing.body,
+                tag = existing.tag,
+                createdAt = now
+            )
+        )
+
         val updated = existing.copy(
             title = title.trim(),
             body = body.trim(),
             tag = tag.trim(),
-            updatedAt = System.currentTimeMillis(),
+            isAnonymous = isAnonymous,
+            updatedAt = now,
             isEdited = true
         )
         postDao.update(updated)
@@ -547,6 +594,21 @@ class RoomAppRepository(
             throw IllegalArgumentException("Title, content, and AI model are required")
         }
 
+        val now = System.currentTimeMillis()
+        promptVersionDao.insert(
+            PromptVersionEntity(
+                promptId = existing.id,
+                title = existing.title,
+                description = existing.description,
+                content = existing.content,
+                tag = existing.tag,
+                temperature = existing.temperature,
+                context = existing.context,
+                memoryTokens = existing.memoryTokens,
+                createdAt = now
+            )
+        )
+
         val updated = existing.copy(
             title = title.trim(),
             description = description.trim(),
@@ -555,14 +617,47 @@ class RoomAppRepository(
             temperature = temperature?.trim()?.takeIf { it.isNotBlank() },
             context = context?.trim()?.takeIf { it.isNotBlank() },
             memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
-            updatedAt = System.currentTimeMillis(),
-            isPrivate = isPrivate
+            updatedAt = now,
+            isPrivate = isPrivate,
+            isEdited = true
         )
         promptDao.update(updated)
     }
 
     override suspend fun deletePrompt(promptId: Long) {
         promptDao.delete(promptId)
+    }
+
+    override suspend fun togglePostBookmark(userId: Long, postId: Long): Boolean {
+        val result = postBookmarkDao.insert(
+            PostBookmarkEntity(
+                userId = userId,
+                postId = postId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        return if (result == -1L) {
+            postBookmarkDao.delete(userId, postId)
+            false
+        } else {
+            true
+        }
+    }
+
+    override suspend fun togglePromptBookmark(userId: Long, promptId: Long): Boolean {
+        val result = promptBookmarkDao.insert(
+            PromptBookmarkEntity(
+                userId = userId,
+                promptId = promptId,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        return if (result == -1L) {
+            promptBookmarkDao.delete(userId, promptId)
+            false
+        } else {
+            true
+        }
     }
 
     override suspend fun saveTagWatchHistory(

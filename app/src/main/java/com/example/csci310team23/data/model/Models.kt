@@ -52,6 +52,7 @@ data class Comment(
 data class Post(
     val id: Long,
     val author: UserSummary,
+    val isAnonymous: Boolean = false,
     val title: String,
     val body: String,
     val tag: String,
@@ -61,6 +62,7 @@ data class Post(
     val comments: List<Comment>,
     val voteSummary: VoteSummary,
     val currentUserVote: Int?,
+    val isBookmarked: Boolean = false,
     val isPublished: Boolean = true,
     val isEdited: Boolean = false
 )
@@ -77,7 +79,9 @@ data class Prompt(
     val memoryTokens: String? = null,
     val createdAt: Instant,
     val updatedAt: Instant,
-    val isPrivate: Boolean = false
+    val isPrivate: Boolean = false,
+    val isBookmarked: Boolean = false,
+    val isEdited: Boolean = false
 )
 
 enum class PostSearchType { TAG, AUTHOR, TITLE, FULL_TEXT }
@@ -99,7 +103,7 @@ data class SearchState(
         currentUserId: Long? = null
     ): SearchState {
         val refreshedPosts = if (postSearchType != null && keyword.isNotBlank()) {
-            posts.filterBy(postSearchType, keyword)
+            posts.filterBy(postSearchType, keyword, currentUserId)
         } else {
             emptyList()
         }
@@ -160,12 +164,17 @@ fun Instant.formatRelative(): String {
     }
 }
 
-private fun List<Post>.filterBy(type: PostSearchType, keyword: String): List<Post> {
+private fun List<Post>.filterBy(
+    type: PostSearchType,
+    keyword: String,
+    currentUserId: Long?
+): List<Post> {
     if (keyword.isBlank()) return emptyList()
     val lower = keyword.lowercase()
     return when (type) {
         PostSearchType.TAG -> filter { it.tag.equals(keyword, ignoreCase = true) }
         PostSearchType.AUTHOR -> filter {
+            if (it.isAnonymous && it.author.id != currentUserId) return@filter false
             it.author.name.lowercase().contains(lower) ||
                     it.author.email.lowercase().contains(lower)
         }
@@ -187,4 +196,26 @@ data class UserWatchHistory(
     val email: String,
     val startTime: Instant,
     val endTime: Instant? = null
+)
+
+data class PostVersion(
+    val id: Long,
+    val postId: Long,
+    val title: String,
+    val body: String,
+    val tag: String,
+    val createdAt: Instant
+)
+
+data class PromptVersion(
+    val id: Long,
+    val promptId: Long,
+    val title: String,
+    val description: String,
+    val content: String,
+    val tag: String,
+    val temperature: String?,
+    val context: String?,
+    val memoryTokens: String?,
+    val createdAt: Instant
 )

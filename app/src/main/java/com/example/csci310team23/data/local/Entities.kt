@@ -44,6 +44,7 @@ data class PostEntity(
     val tag: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val isAnonymous: Boolean = false,
     val isPublished: Boolean = true,
     val isEdited: Boolean = false
 )
@@ -103,7 +104,8 @@ data class PromptEntity(
     val memoryTokens: String? = null,
     val createdAt: Long,
     val updatedAt: Long,
-    val isPrivate: Boolean = false
+    val isPrivate: Boolean = false,
+    val isEdited: Boolean = false
 )
 
 @Entity(
@@ -162,6 +164,58 @@ data class CommentVoteEntity(
     val commentId: Long,
     val userId: Long,
     val value: Int
+)
+
+@Entity(
+    tableName = "post_bookmarks",
+    indices = [Index(value = ["userId", "postId"], unique = true)]
+)
+data class PostBookmarkEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val postId: Long,
+    val createdAt: Long
+)
+
+@Entity(
+    tableName = "prompt_bookmarks",
+    indices = [Index(value = ["userId", "promptId"], unique = true)]
+)
+data class PromptBookmarkEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: Long,
+    val promptId: Long,
+    val createdAt: Long
+)
+
+@Entity(
+    tableName = "post_versions",
+    indices = [Index(value = ["postId"])]
+)
+data class PostVersionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val postId: Long,
+    val title: String,
+    val body: String,
+    val tag: String,
+    val createdAt: Long
+)
+
+@Entity(
+    tableName = "prompt_versions",
+    indices = [Index(value = ["promptId"])]
+)
+data class PromptVersionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val promptId: Long,
+    val title: String,
+    val description: String,
+    val content: String,
+    val tag: String,
+    val temperature: String?,
+    val context: String?,
+    val memoryTokens: String?,
+    val createdAt: Long
 )
 
 @Entity(tableName = "tag_watch_history")

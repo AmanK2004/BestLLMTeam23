@@ -24,10 +24,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
@@ -91,8 +94,10 @@ import com.example.csci310team23.AppGraph
 import com.example.csci310team23.data.model.AuthMode
 import com.example.csci310team23.data.model.Comment
 import com.example.csci310team23.data.model.Post
+import com.example.csci310team23.data.model.PostVersion
 import com.example.csci310team23.data.model.PostSearchType
 import com.example.csci310team23.data.model.Prompt
+import com.example.csci310team23.data.model.PromptVersion
 import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
 import com.example.csci310team23.data.model.UserWatchHistory
@@ -545,6 +550,7 @@ private enum class MainSection(val title: String) {
     FEED("Feed"),
     TRENDING("Trending"),
     PROMPTS("Prompts"),
+    SAVED("Bookmarks"),
     SEARCH("Search"),
     PROFILE("Profile")
 }
@@ -569,13 +575,14 @@ private fun MainScreen(
         bottomBar = {
             NavigationBar {
                 MainSection.values().forEach { section ->
-                    val icon = when (section) {
-                        MainSection.FEED -> Icons.Filled.Home
-                        MainSection.TRENDING -> Icons.Outlined.Whatshot
-                        MainSection.PROMPTS -> Icons.Outlined.Article
-                        MainSection.SEARCH -> Icons.Filled.Search
-                        MainSection.PROFILE -> Icons.Filled.Person
-                    }
+                      val icon = when (section) {
+                          MainSection.FEED -> Icons.Filled.Home
+                          MainSection.TRENDING -> Icons.Outlined.Whatshot
+                          MainSection.PROMPTS -> Icons.Outlined.Article
+                          MainSection.SAVED -> Icons.Filled.Bookmark
+                          MainSection.SEARCH -> Icons.Filled.Search
+                          MainSection.PROFILE -> Icons.Filled.Person
+                      }
                     NavigationBarItem(
                         selected = section == selectedSection,
                         onClick = { selectedSection = section },
@@ -591,39 +598,57 @@ private fun MainScreen(
             MainSection.FEED -> FeedSection(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
-                posts = uiState.posts,
-                isFeedRefreshing = uiState.isFeedRefreshing,
-                onCreatePost = { title, body, tag, isDraft ->
-                    viewModel.createPost(title, body, tag, isDraft)
-                },
-                onUpdatePost = viewModel::updatePost,
-                onDeletePost = viewModel::deletePost,
-                onPublishDraft = viewModel::publishDraft,
-                onCreateComment = viewModel::createComment,
-                onUpdateComment = viewModel::updateComment,
-                onVotePost = viewModel::voteOnPost,
-                onVoteComment = viewModel::voteOnComment,
-                onWatchTag = viewModel::watchTag,
-                onWatchUser = viewModel::watchUser,
-                watchedTagsHistory = uiState.watchedTagsHistory,
-                watchedUsersHistory = uiState.watchedUsersHistory,
-                allUsers = uiState.allUsers
-            )
+                  posts = uiState.posts,
+                  isFeedRefreshing = uiState.isFeedRefreshing,
+                  onCreatePost = { title, body, tag, isDraft, isAnonymous ->
+                      viewModel.createPost(title, body, tag, isDraft, isAnonymous)
+                  },
+                  onUpdatePost = viewModel::updatePost,
+                  onDeletePost = viewModel::deletePost,
+                  onPublishDraft = viewModel::publishDraft,
+                  onCreateComment = viewModel::createComment,
+                  onUpdateComment = viewModel::updateComment,
+                  onVotePost = viewModel::voteOnPost,
+                  onVoteComment = viewModel::voteOnComment,
+                  onWatchTag = viewModel::watchTag,
+                  onWatchUser = viewModel::watchUser,
+                  watchedTagsHistory = uiState.watchedTagsHistory,
+                  watchedUsersHistory = uiState.watchedUsersHistory,
+                  allUsers = uiState.allUsers,
+                  postVersions = uiState.postVersions,
+                  onToggleBookmark = viewModel::togglePostBookmark
+              )
 
-            MainSection.TRENDING -> TrendingSection(
-                modifier = Modifier.padding(innerPadding),
-                posts = uiState.trending,
-                currentUser = currentUser,
-                onVotePost = viewModel::voteOnPost,
-                onVoteComment = viewModel::voteOnComment
-            )
+              MainSection.TRENDING -> TrendingSection(
+                  modifier = Modifier.padding(innerPadding),
+                  posts = uiState.trending,
+                  currentUser = currentUser,
+                  onVotePost = viewModel::voteOnPost,
+                  onVoteComment = viewModel::voteOnComment,
+                  onToggleBookmark = viewModel::togglePostBookmark,
+                  postVersions = uiState.postVersions
+              )
 
-            MainSection.PROMPTS -> PromptSection(
-                modifier = Modifier.padding(innerPadding),
-                currentUser = currentUser,
-                allPrompts = uiState.prompts,
-                onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
-                    viewModel.createPrompt(
+              MainSection.PROMPTS -> PromptSection(
+                  modifier = Modifier.padding(innerPadding),
+                  currentUser = currentUser,
+                  allPrompts = uiState.prompts,
+                  promptVersions = uiState.promptVersions,
+                  onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                      viewModel.createPrompt(
+                          title,
+                          description,
+                          content,
+                        tag,
+                        temperature,
+                        context,
+                        memoryTokens,
+                        isPrivate
+                      )
+                  },
+                  onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                      viewModel.updatePrompt(
+                          id,
                         title,
                         description,
                         content,
@@ -631,28 +656,36 @@ private fun MainScreen(
                         temperature,
                         context,
                         memoryTokens,
-                        isPrivate
-                    )
-                },
-                onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
-                    viewModel.updatePrompt(
-                        id,
-                        title,
-                        description,
-                        content,
-                        tag,
-                        temperature,
-                        context,
-                        memoryTokens,
-                        isPrivate
-                    )
-                },
-                onDeletePrompt = viewModel::deletePrompt
-            )
+                          isPrivate
+                      )
+                  },
+                  onDeletePrompt = viewModel::deletePrompt,
+                  onTogglePromptBookmark = viewModel::togglePromptBookmark
+              )
 
-            MainSection.SEARCH -> SearchSection(
-                modifier = Modifier.padding(innerPadding),
-                currentUser = currentUser,
+              MainSection.SAVED -> BookmarkSection(
+                  modifier = Modifier.padding(innerPadding),
+                  currentUser = currentUser,
+                  bookmarkedPosts = uiState.bookmarkedPosts,
+                  bookmarkedPrompts = uiState.bookmarkedPrompts,
+                  postVersions = uiState.postVersions,
+                  promptVersions = uiState.promptVersions,
+                  onVotePost = viewModel::voteOnPost,
+                  onVoteComment = viewModel::voteOnComment,
+                  onPublishDraft = viewModel::publishDraft,
+                  onDeletePost = viewModel::deletePost,
+                  onUpdatePost = viewModel::updatePost,
+                  onUpdatePrompt = viewModel::updatePrompt,
+                  onDeletePrompt = viewModel::deletePrompt,
+                  onCreateComment = viewModel::createComment,
+                  onUpdateComment = viewModel::updateComment,
+                  onTogglePostBookmark = viewModel::togglePostBookmark,
+                  onTogglePromptBookmark = viewModel::togglePromptBookmark
+              )
+
+              MainSection.SEARCH -> SearchSection(
+                  modifier = Modifier.padding(innerPadding),
+                  currentUser = currentUser,
                 posts = uiState.searchState.postResults,
                 prompts = uiState.searchState.promptResults,
                 users = uiState.searchState.userResults,
@@ -678,8 +711,8 @@ private fun FeedSection(
     currentUser: UserProfile?,
     posts: List<Post>,
     isFeedRefreshing: Boolean,
-    onCreatePost: (String, String, String, Boolean) -> Unit,
-    onUpdatePost: (Long, String, String, String) -> Unit,
+    onCreatePost: (String, String, String, Boolean, Boolean) -> Unit,
+    onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
     onDeletePost: (Long) -> Unit,
     onPublishDraft: (Long) -> Unit,
     onCreateComment: (Long, String?, String) -> Unit,
@@ -690,7 +723,9 @@ private fun FeedSection(
     onWatchUser: (String) -> Unit,
     watchedTagsHistory: List<TagWatchHistory>,
     watchedUsersHistory: List<UserWatchHistory>,
-    allUsers: List<UserProfile>
+    allUsers: List<UserProfile>,
+    postVersions: Map<Long, List<PostVersion>>,
+    onToggleBookmark: (Long) -> Unit
 ) {
     var showCreatePost by rememberSaveable { mutableStateOf(false) }
     var showWatchDialog by remember { mutableStateOf(false) }
@@ -781,8 +816,8 @@ private fun FeedSection(
                 ) {
                     if (currentUser != null) {
                         CreatePostCard(
-                            onCreatePost = { title, body, tag, isDraft ->
-                                onCreatePost(title, body, tag, isDraft)
+                            onCreatePost = { title, body, tag, isDraft, isAnonymous ->
+                                onCreatePost(title, body, tag, isDraft, isAnonymous)
                                 showCreatePost = false
                             }
                         )
@@ -806,7 +841,9 @@ private fun FeedSection(
                         onUpdateComment = onUpdateComment,
                         onVotePost = onVotePost,
                         onVoteComment = onVoteComment,
-                        enableCommentComposer = true,
+                        onToggleBookmark = onToggleBookmark,
+                        versions = postVersions[post.id].orEmpty(),
+                        enableCommentComposer = currentUser != null,
                         showVoting = post.isPublished
                     )
                 }
@@ -968,7 +1005,9 @@ private fun TrendingSection(
     posts: List<Post>,
     currentUser: UserProfile?,
     onVotePost: (Long, Int) -> Unit,
-    onVoteComment: (Long, Int) -> Unit
+    onVoteComment: (Long, Int) -> Unit,
+    onToggleBookmark: (Long) -> Unit,
+    postVersions: Map<Long, List<PostVersion>>
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1002,13 +1041,15 @@ private fun TrendingSection(
             PostCard(
                 post = post,
                 currentUser = currentUser,
-                onUpdatePost = { _, _, _, _ -> },
+                onUpdatePost = { _, _, _, _, _ -> },
                 onDeletePost = { _ -> },
                 onPublishDraft = { _ -> },
                 onCreateComment = { _, _, _ -> },
                 onUpdateComment = { _, _, _ -> },
                 onVotePost = onVotePost,
                 onVoteComment = onVoteComment,
+                onToggleBookmark = onToggleBookmark,
+                versions = postVersions[post.id].orEmpty(),
                 enableCommentComposer = false,
                 showVoting = true
             )
@@ -1031,9 +1072,11 @@ private fun PromptSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
     allPrompts: List<Prompt>,
+    promptVersions: Map<Long, List<PromptVersion>>,
     onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean) -> Unit,
     onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
-    onDeletePrompt: (Long) -> Unit
+    onDeletePrompt: (Long) -> Unit,
+    onTogglePromptBookmark: (Long) -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showCreatePrompt by rememberSaveable { mutableStateOf(false) }
@@ -1135,7 +1178,9 @@ private fun PromptSection(
                         prompt = prompt,
                         canEdit = true,
                         onUpdatePrompt = onUpdatePrompt,
-                        onDeletePrompt = onDeletePrompt
+                        onDeletePrompt = onDeletePrompt,
+                        onToggleBookmark = onTogglePromptBookmark,
+                        versions = promptVersions[prompt.id].orEmpty()
                     )
                 }
                 if (myPrompts.isEmpty()) {
@@ -1155,7 +1200,9 @@ private fun PromptSection(
                         prompt = prompt,
                         canEdit = currentUser?.id == prompt.author.id,
                         onUpdatePrompt = onUpdatePrompt,
-                        onDeletePrompt = onDeletePrompt
+                        onDeletePrompt = onDeletePrompt,
+                        onToggleBookmark = onTogglePromptBookmark,
+                        versions = promptVersions[prompt.id].orEmpty()
                     )
                 }
                 if (publicPrompts.isEmpty()) {
@@ -1164,6 +1211,117 @@ private fun PromptSection(
                             text = "No public prompts shared yet. Be the first!",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BookmarkSection(
+    modifier: Modifier = Modifier,
+    currentUser: UserProfile?,
+    bookmarkedPosts: List<Post>,
+    bookmarkedPrompts: List<Prompt>,
+    postVersions: Map<Long, List<PostVersion>>,
+    promptVersions: Map<Long, List<PromptVersion>>,
+    onVotePost: (Long, Int) -> Unit,
+    onVoteComment: (Long, Int) -> Unit,
+    onPublishDraft: (Long) -> Unit,
+    onDeletePost: (Long) -> Unit,
+    onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onDeletePrompt: (Long) -> Unit,
+    onCreateComment: (Long, String?, String) -> Unit,
+    onUpdateComment: (Long, String?, String) -> Unit,
+    onTogglePostBookmark: (Long) -> Unit,
+    onTogglePromptBookmark: (Long) -> Unit
+) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Bookmarks",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Saved posts and prompts to revisit later",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Posts") }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Prompts") }
+                    )
+                }
+            }
+        }
+
+        when (selectedTab) {
+            0 -> {
+                items(bookmarkedPosts, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        currentUser = currentUser,
+                        onUpdatePost = onUpdatePost,
+                        onDeletePost = onDeletePost,
+                        onPublishDraft = onPublishDraft,
+                        onCreateComment = onCreateComment,
+                        onUpdateComment = onUpdateComment,
+                        onVotePost = onVotePost,
+                        onVoteComment = onVoteComment,
+                        onToggleBookmark = onTogglePostBookmark,
+                        versions = postVersions[post.id].orEmpty(),
+                        enableCommentComposer = currentUser != null,
+                        showVoting = post.isPublished
+                    )
+                }
+                if (bookmarkedPosts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No saved posts yet. Tap the bookmark icon to save posts.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+            }
+
+            1 -> {
+                items(bookmarkedPrompts, key = { it.id }) { prompt ->
+                    PromptCard(
+                        prompt = prompt,
+                        canEdit = currentUser?.id == prompt.author.id,
+                        onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                            onUpdatePrompt(id, title, description, content, tag, temperature, context, memoryTokens, isPrivate)
+                        },
+                        onDeletePrompt = onDeletePrompt,
+                        onToggleBookmark = onTogglePromptBookmark,
+                        versions = promptVersions[prompt.id].orEmpty()
+                    )
+                }
+                if (bookmarkedPrompts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No saved prompts yet. Bookmark prompts to build your library.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 12.dp)
                         )
                     }
                 }
@@ -1806,12 +1964,13 @@ private fun ProfileSection(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreatePostCard(
-    onCreatePost: (String, String, String, Boolean) -> Unit
+    onCreatePost: (String, String, String, Boolean, Boolean) -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var tag by rememberSaveable { mutableStateOf("") }
     var body by rememberSaveable { mutableStateOf("") }
     var isDraft by rememberSaveable { mutableStateOf(false) }
+    var isAnonymous by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tagExpanded by remember { mutableStateOf(false) }
 
@@ -1894,6 +2053,18 @@ private fun CreatePostCard(
                 Text("Save as Draft (not visible to others)")
             }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isAnonymous,
+                    onCheckedChange = { isAnonymous = it },
+                    modifier = Modifier.testTag("create_post_anonymous_checkbox")
+                )
+                Text("Post anonymously (name hidden from others)")
+            }
+
             error?.let {
                 Text(
                     text = it,
@@ -1910,7 +2081,7 @@ private fun CreatePostCard(
                         body.isBlank() -> error = "Post content is required"
                         else -> {
                             error = null
-                            onCreatePost(title.trim(), body.trim(), tag.trim(), isDraft)
+                            onCreatePost(title.trim(), body.trim(), tag.trim(), isDraft, isAnonymous)
                         }
                     }
                 },
@@ -1928,13 +2099,15 @@ private fun CreatePostCard(
 private fun PostCard(
     post: Post,
     currentUser: UserProfile?,
-    onUpdatePost: (Long, String, String, String) -> Unit,
+    onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
     onDeletePost: (Long) -> Unit,
     onPublishDraft: (Long) -> Unit,
     onCreateComment: (Long, String?, String) -> Unit,
     onUpdateComment: (Long, String?, String) -> Unit,
     onVotePost: (Long, Int) -> Unit,
     onVoteComment: (Long, Int) -> Unit,
+    onToggleBookmark: (Long) -> Unit = {},
+    versions: List<PostVersion> = emptyList(),
     enableCommentComposer: Boolean,
     showVoting: Boolean
 ) {
@@ -1947,6 +2120,11 @@ private fun PostCard(
     var editPostTitle by remember { mutableStateOf(post.title) }
     var editPostTag by remember { mutableStateOf(post.tag) }
     var editPostBody by remember { mutableStateOf(post.body) }
+    var editPostIsAnonymous by remember { mutableStateOf(post.isAnonymous) }
+    var showHistory by remember { mutableStateOf(false) }
+
+    val isOwnPost = currentUser?.id == post.author.id
+    val displayName = if (post.isAnonymous && !isOwnPost) "Anonymous" else post.author.name
 
     BaseContentCard(modifier = Modifier.testTag("post_card")) {
         Row(
@@ -1984,9 +2162,16 @@ private fun PostCard(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "${post.author.name} • ${post.createdAt.formatRelative()}",
+                        text = "$displayName • ${post.createdAt.formatRelative()}",
                         style = MaterialTheme.typography.bodySmall
                     )
+                    if (post.isAnonymous) {
+                        Text(
+                            text = "(anonymous)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (post.isEdited) {
                         Text(
                             text = "(edited)",
@@ -2001,12 +2186,22 @@ private fun PostCard(
                 horizontalArrangement = Arrangement.End,
                 modifier = Modifier.padding(start = 8.dp)
             ) {
-                if (currentUser?.id == post.author.id) {
-                    Text(
-                        text = "#${post.tag}",
-                        style = MaterialTheme.typography.labelLarge
+                Text(
+                    text = "#${post.tag}",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                IconButton(
+                    onClick = { onToggleBookmark(post.id) },
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("post_bookmark_button")
+                ) {
+                    Icon(
+                        if (post.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = "Bookmark post"
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                if (isOwnPost) {
                     IconButton(
                         onClick = { showMenu = true },
                         modifier = Modifier
@@ -2029,6 +2224,7 @@ private fun PostCard(
                                 editPostTitle = post.title
                                 editPostTag = post.tag
                                 editPostBody = post.body
+                                editPostIsAnonymous = post.isAnonymous
                                 showEditPost = true
                                 showMenu = false
                             },
@@ -2088,6 +2284,19 @@ private fun PostCard(
                 upvoteTag = "post_upvote_button",
                 downvoteTag = "post_downvote_button"
             )
+        }
+
+        if (versions.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = { showHistory = true }) {
+                    Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("History (${versions.size})")
+                }
+            }
         }
 
         if (post.comments.isNotEmpty() && post.isPublished) {
@@ -2169,16 +2378,71 @@ private fun PostCard(
         }
     }
 
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            confirmButton = {
+                TextButton(onClick = { showHistory = false }) { Text("Close") }
+            },
+            title = { Text("Post Version History") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    versions.forEach { version ->
+                        OutlinedCard {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = version.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "${version.createdAt.formatRelative()} • #${version.tag}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = version.body,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    if (versions.isEmpty()) {
+                        Text(
+                            text = "No previous versions yet.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        )
+    }
+
     if (showEditPost) {
         EditPostDialog(
             title = editPostTitle,
             tag = editPostTag,
             body = editPostBody,
+            isAnonymous = editPostIsAnonymous,
             onTitleChange = { editPostTitle = it },
             onTagChange = { editPostTag = it },
             onBodyChange = { editPostBody = it },
+            onAnonymousChange = { editPostIsAnonymous = it },
             onSave = {
-                onUpdatePost(post.id, editPostTitle.trim(), editPostBody.trim(), editPostTag.trim())
+                onUpdatePost(
+                    post.id,
+                    editPostTitle.trim(),
+                    editPostBody.trim(),
+                    editPostTag.trim(),
+                    editPostIsAnonymous
+                )
                 showEditPost = false
             },
             onDismiss = { showEditPost = false }
@@ -2214,9 +2478,11 @@ private fun EditPostDialog(
     title: String,
     tag: String,
     body: String,
+    isAnonymous: Boolean,
     onTitleChange: (String) -> Unit,
     onTagChange: (String) -> Unit,
     onBodyChange: (String) -> Unit,
+    onAnonymousChange: (Boolean) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2293,6 +2559,16 @@ private fun EditPostDialog(
                         .heightIn(min = 160.dp)
                         .testTag("edit_post_body_field")
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Checkbox(
+                        checked = isAnonymous,
+                        onCheckedChange = onAnonymousChange
+                    )
+                    Text("Post anonymously")
+                }
                 error?.let {
                     Text(
                         text = it,
@@ -2644,7 +2920,7 @@ private fun CreatePromptCard(
                     onCheckedChange = { isPrivate = it },
                     modifier = Modifier.testTag("create_prompt_private_checkbox")
                 )
-                Text("Keep Private (only you can see)")
+                Text("Save as Private Draft (only you can see)")
             }
 
             error?.let {
@@ -2691,17 +2967,19 @@ private fun PromptCard(
     prompt: Prompt,
     canEdit: Boolean,
     onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
-    onDeletePrompt: (Long) -> Unit
+    onDeletePrompt: (Long) -> Unit,
+    onToggleBookmark: (Long) -> Unit,
+    versions: List<PromptVersion> = emptyList()
 ) {
     var showEdit by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showOptional by rememberSaveable(prompt.id) { mutableStateOf(false) }
+    var showHistory by remember { mutableStateOf(false) }
 
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
             !prompt.context.isNullOrBlank() ||
             !prompt.memoryTokens.isNullOrBlank()
-    println("DEBUG: temp='${prompt.temperature}' ctx='${prompt.context}' mem='${prompt.memoryTokens}' hasOpt=$hasOptionalFields")
 
 
     BaseContentCard {
@@ -2738,10 +3016,19 @@ private fun PromptCard(
 
                 Spacer(modifier = Modifier.size(4.dp))
 
-                Text(
-                    text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (prompt.isEdited) {
+                        Text(
+                            text = "(edited)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
             }
             Row(
                 verticalAlignment = Alignment.Top,
@@ -2751,8 +3038,18 @@ private fun PromptCard(
                     text = "#${prompt.tag}",
                     style = MaterialTheme.typography.labelLarge
                 )
+                IconButton(
+                    onClick = { onToggleBookmark(prompt.id) },
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("prompt_bookmark_button")
+                ) {
+                    Icon(
+                        if (prompt.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = "Bookmark prompt"
+                    )
+                }
                 if (canEdit) {
-                    Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = { showMenu = true },
                         modifier = Modifier
@@ -2834,6 +3131,65 @@ private fun PromptCard(
                 }
             }
         }
+
+        if (versions.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = { showHistory = true }) {
+                    Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("History (${versions.size})")
+                }
+            }
+        }
+    }
+
+    if (showHistory) {
+        AlertDialog(
+            onDismissRequest = { showHistory = false },
+            confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Close") } },
+            title = { Text("Prompt Version History") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    versions.forEach { version ->
+                        OutlinedCard {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(version.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = "${version.createdAt.formatRelative()} • #${version.tag}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (version.description.isNotBlank()) {
+                                    Text(
+                                        text = version.description,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Text(
+                                    text = version.content,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    if (versions.isEmpty()) {
+                        Text("No previous versions yet.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        )
     }
 
     if (showEdit) {
@@ -3050,7 +3406,7 @@ private fun EditPromptDialog(
                             onCheckedChange = { isPrivate = it },
                             modifier = Modifier.testTag("edit_prompt_private_checkbox")
                         )
-                        Text("Keep Private")
+                        Text("Save as Private Draft")
                     }
                 }
 
@@ -3077,7 +3433,6 @@ private fun PromptSearchCard(
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
             !prompt.context.isNullOrBlank() ||
             !prompt.memoryTokens.isNullOrBlank()
-    println("DEBUG: temp='${prompt.temperature}' ctx='${prompt.context}' mem='${prompt.memoryTokens}' hasOpt=$hasOptionalFields")
 
     BaseContentCard {
         Row(
@@ -3173,6 +3528,7 @@ private fun PromptSearchCard(
 
 @Composable
 private fun PostSummaryCard(post: Post) {
+    val displayName = if (post.isAnonymous) "Anonymous" else post.author.name
     BaseContentCard(modifier = Modifier.testTag("post_summary_card")) {
         Text(
             text = post.title,
@@ -3181,7 +3537,7 @@ private fun PostSummaryCard(post: Post) {
         )
         Spacer(modifier = Modifier.size(4.dp))
         Text(
-            text = "${post.author.name} • ${post.createdAt.formatRelative()} • #${post.tag}",
+            text = "$displayName • ${post.createdAt.formatRelative()} • #${post.tag}",
             style = MaterialTheme.typography.bodySmall
         )
         Text(

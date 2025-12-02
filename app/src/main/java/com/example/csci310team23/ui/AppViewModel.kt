@@ -11,6 +11,8 @@ import com.example.csci310team23.data.model.Prompt
 import com.example.csci310team23.data.model.SearchState
 import com.example.csci310team23.data.model.TagWatchHistory
 import com.example.csci310team23.data.model.UserProfile
+import com.example.csci310team23.data.model.PostVersion
+import com.example.csci310team23.data.model.PromptVersion
 import com.example.csci310team23.data.model.UserSummary
 import com.example.csci310team23.data.model.UserWatchHistory
 import com.example.csci310team23.data.model.VoteSummary
@@ -48,11 +50,15 @@ data class AppUiState(
     val posts: List<Post> = emptyList(),
     val allPosts: List<Post> = emptyList(),
     val prompts: List<Prompt> = emptyList(),
+    val bookmarkedPosts: List<Post> = emptyList(),
+    val bookmarkedPrompts: List<Prompt> = emptyList(),
     val trending: List<Post> = emptyList(),
     val searchState: SearchState = SearchState(),
     val watchedTagsHistory: List<TagWatchHistory> = emptyList(),
     val watchedUsersHistory: List<UserWatchHistory> = emptyList(),
     val allUsers: List<UserProfile> = emptyList(),
+    val postVersions: Map<Long, List<PostVersion>> = emptyMap(),
+    val promptVersions: Map<Long, List<PromptVersion>> = emptyMap(),
     val errorMessage: String? = null,
     val infoMessage: String? = null,
     val isFeedRefreshing: Boolean = false
@@ -80,8 +86,12 @@ class AppViewModel(
         val feedPosts: List<Post>,
         val allPosts: List<Post>,
         val allPrompts: List<Prompt>,
+        val bookmarkedPosts: List<Post>,
+        val bookmarkedPrompts: List<Prompt>,
         val trending: List<Post>,
         val allUsers: List<UserProfile>,
+        val postVersions: Map<Long, List<PostVersion>>,
+        val promptVersions: Map<Long, List<PromptVersion>>,
         val userId: Long?
     )
 
@@ -95,8 +105,40 @@ class AppViewModel(
             ) { userId, snapshot, watchedTags, watchedUsers ->
                 val userProfiles = snapshot.users.associate { it.id to it.toProfile() }
                 val currentUser = userId?.let { userProfiles[it] }
-                val allPosts = buildAllPosts(snapshot, userProfiles, userId)
-                val allPrompts = buildPrompts(snapshot, userProfiles, userId)
+                val bookmarkedPostIds = snapshot.postBookmarks
+                    .filter { it.userId == userId }
+                    .map { it.postId }
+                    .toSet()
+                val bookmarkedPromptIds = snapshot.promptBookmarks
+                    .filter { it.userId == userId }
+                    .map { it.promptId }
+                    .toSet()
+
+                val postVersionsMap = snapshot.postVersions
+                    .groupBy { it.postId }
+                    .mapValues { entry ->
+                        entry.value.map { it.toDomain() }
+                            .sortedByDescending { version -> version.createdAt }
+                    }
+                val promptVersionsMap = snapshot.promptVersions
+                    .groupBy { it.promptId }
+                    .mapValues { entry ->
+                        entry.value.map { it.toDomain() }
+                            .sortedByDescending { version -> version.createdAt }
+                    }
+
+                val allPosts = buildAllPosts(
+                    snapshot,
+                    userProfiles,
+                    userId,
+                    bookmarkedPostIds
+                )
+                val allPrompts = buildPrompts(
+                    snapshot,
+                    userProfiles,
+                    userId,
+                    bookmarkedPromptIds
+                )
                 val allUsers = snapshot.users.map { it.toProfile() }
 
                 val feedPosts = filterFeedPosts(
@@ -106,6 +148,9 @@ class AppViewModel(
                     watchedUsers,
                     allUsers
                 )
+
+                val bookmarkedPosts = allPosts.filter { bookmarkedPostIds.contains(it.id) }
+                val bookmarkedPrompts = allPrompts.filter { bookmarkedPromptIds.contains(it.id) }
 
                 val trending = allPosts
                     .filter { it.isPublished }
@@ -117,16 +162,20 @@ class AppViewModel(
 
                 val requiresProfile = currentUser?.let { !it.isProfileComplete } == true
 
-                CombinedData(
-                    currentUser = currentUser,
-                    requiresProfileSetup = requiresProfile,
-                    feedPosts = feedPosts,
-                    allPosts = allPosts,
-                    allPrompts = allPrompts,
-                    trending = trending,
-                    allUsers = allUsers,
-                    userId = userId
-                )
+                    CombinedData(
+                        currentUser = currentUser,
+                        requiresProfileSetup = requiresProfile,
+                        feedPosts = feedPosts,
+                        allPosts = allPosts,
+                        allPrompts = allPrompts,
+                        bookmarkedPosts = bookmarkedPosts,
+                        bookmarkedPrompts = bookmarkedPrompts,
+                        trending = trending,
+                        allUsers = allUsers,
+                        postVersions = postVersionsMap,
+                        promptVersions = promptVersionsMap,
+                        userId = userId
+                    )
             }.collect { combinedData ->
                 _uiState.update { state ->
                     val updatedSearch = state.searchState.recompute(
@@ -141,9 +190,13 @@ class AppViewModel(
                         posts = combinedData.feedPosts,
                         allPosts = combinedData.allPosts,
                         prompts = combinedData.allPrompts,
+                        bookmarkedPosts = combinedData.bookmarkedPosts,
+                        bookmarkedPrompts = combinedData.bookmarkedPrompts,
                         trending = combinedData.trending,
                         searchState = updatedSearch,
-                        allUsers = combinedData.allUsers
+                        allUsers = combinedData.allUsers,
+                        postVersions = combinedData.postVersions,
+                        promptVersions = combinedData.promptVersions
                     )
                 }
             }
@@ -290,12 +343,18 @@ class AppViewModel(
         }
     }
 
-    fun createPost(title: String, body: String, tag: String, isDraft: Boolean = false) {
+    fun createPost(
+        title: String,
+        body: String,
+        tag: String,
+        isDraft: Boolean = false,
+        isAnonymous: Boolean = false
+    ) {
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
             try {
                 val isPublished = !isDraft
-                repository.createPost(userId, title, body, tag, isPublished)
+                repository.createPost(userId, title, body, tag, isAnonymous, isPublished)
                 val message = if (isDraft) "Post saved as draft" else "Post published"
                 _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
@@ -304,10 +363,16 @@ class AppViewModel(
         }
     }
 
-    fun updatePost(postId: Long, title: String, body: String, tag: String) {
+    fun updatePost(
+        postId: Long,
+        title: String,
+        body: String,
+        tag: String,
+        isAnonymous: Boolean
+    ) {
         viewModelScope.launch {
             try {
-                repository.updatePost(postId, title, body, tag)
+                repository.updatePost(postId, title, body, tag, isAnonymous)
                 _uiState.update { it.copy(infoMessage = "Post updated") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to update post") }
@@ -453,6 +518,26 @@ class AppViewModel(
                 _uiState.update { it.copy(infoMessage = "Prompt removed") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to delete prompt") }
+            }
+        }
+    }
+
+    fun togglePostBookmark(postId: Long) {
+        val userId = currentUserId.value ?: return
+        viewModelScope.launch {
+            val added = repository.togglePostBookmark(userId, postId)
+            _uiState.update {
+                it.copy(infoMessage = if (added) "Saved to bookmarks" else "Removed from bookmarks")
+            }
+        }
+    }
+
+    fun togglePromptBookmark(promptId: Long) {
+        val userId = currentUserId.value ?: return
+        viewModelScope.launch {
+            val added = repository.togglePromptBookmark(userId, promptId)
+            _uiState.update {
+                it.copy(infoMessage = if (added) "Saved prompt" else "Removed prompt bookmark")
             }
         }
     }
@@ -652,7 +737,8 @@ class AppViewModel(
     private fun buildAllPosts(
         snapshot: AppDataSnapshot,
         userProfiles: Map<Long, UserProfile>,
-        currentUserId: Long?
+        currentUserId: Long?,
+        bookmarkedPostIds: Set<Long>
     ): List<Post> {
         val userSummaries = userProfiles.mapValues { (_, profile) ->
             UserSummary(
@@ -685,7 +771,8 @@ class AppViewModel(
                 votes.firstOrNull { it.userId == id }?.value
             }
 
-            post.toDomain(author, postComments, summary, currentVote)
+            val isBookmarked = bookmarkedPostIds.contains(post.id)
+            post.toDomain(author, postComments, summary, currentVote, isBookmarked)
         }
         return posts
     }
@@ -710,7 +797,8 @@ class AppViewModel(
     private fun buildPrompts(
         snapshot: AppDataSnapshot,
         userProfiles: Map<Long, UserProfile>,
-        currentUserId: Long?
+        currentUserId: Long?,
+        bookmarkedPromptIds: Set<Long>
     ): List<Prompt> {
         val userSummaries = userProfiles.mapValues { (_, profile) ->
             UserSummary(
@@ -728,7 +816,8 @@ class AppViewModel(
                 }
 
                 val author = userSummaries[prompt.authorId] ?: return@mapNotNull null
-                prompt.toDomain(author)
+                val isBookmarked = bookmarkedPromptIds.contains(prompt.id)
+                prompt.toDomain(author, isBookmarked)
             }
     }
 

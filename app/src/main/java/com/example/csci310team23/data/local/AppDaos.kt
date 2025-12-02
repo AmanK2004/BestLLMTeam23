@@ -147,3 +147,45 @@ interface UserWatchHistoryDao {
     @Query("DELETE FROM user_watch_history WHERE userId = :userId AND watchedUserEmail = :email")
     suspend fun delete(userId: Long, email: String)
 }
+
+@Dao
+interface PostBookmarkDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(entity: PostBookmarkEntity): Long
+
+    @Query("DELETE FROM post_bookmarks WHERE userId = :userId AND postId = :postId")
+    suspend fun delete(userId: Long, postId: Long)
+
+    @Query("SELECT * FROM post_bookmarks")
+    fun observeAll(): Flow<List<PostBookmarkEntity>>
+}
+
+@Dao
+interface PromptBookmarkDao {
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(entity: PromptBookmarkEntity): Long
+
+    @Query("DELETE FROM prompt_bookmarks WHERE userId = :userId AND promptId = :promptId")
+    suspend fun delete(userId: Long, promptId: Long)
+
+    @Query("SELECT * FROM prompt_bookmarks")
+    fun observeAll(): Flow<List<PromptBookmarkEntity>>
+}
+
+@Dao
+interface PostVersionDao {
+    @Insert
+    suspend fun insert(entity: PostVersionEntity): Long
+
+    @Query("SELECT * FROM post_versions")
+    fun observeAll(): Flow<List<PostVersionEntity>>
+}
+
+@Dao
+interface PromptVersionDao {
+    @Insert
+    suspend fun insert(entity: PromptVersionEntity): Long
+
+    @Query("SELECT * FROM prompt_versions")
+    fun observeAll(): Flow<List<PromptVersionEntity>>
+}
