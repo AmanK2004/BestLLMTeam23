@@ -92,7 +92,7 @@ data class SearchState(
     val postResults: List<Post> = emptyList(),
     val promptTag: String = "",
     val promptResults: List<Prompt> = emptyList(),
-    val userEmail: String = "",
+    val userQuery: String = "",
     val userResults: List<UserSearchResult> = emptyList(),
     val allUsers: List<UserProfile> = emptyList()
 ) {
@@ -116,10 +116,15 @@ data class SearchState(
             emptyList()
         }
 
-        val refreshedUsers = if (userEmail.isNotBlank()) {
+        val refreshedUsers = if (userQuery.isNotBlank()) {
+            val tokens = tokenizeForSearch(userQuery)
             val matchingUsers = users.filter { user ->
-                user.email.equals(userEmail.trim(), ignoreCase = true) ||
-                        user.name.lowercase().contains(userEmail.trim().lowercase())
+                if (tokens.isEmpty()) return@filter false
+                val nameTokens = tokenizeForSearch(user.name)
+                tokens.all { token ->
+                    isFuzzyMatch(token, user.email.lowercase()) ||
+                            nameTokens.any { part -> isFuzzyMatch(token, part) }
+                }
             }
             matchingUsers.map { user ->
                 val userPrompts = if (user.id == currentUserId) {
@@ -149,8 +154,6 @@ fun Long?.toLocalDate(): LocalDate? = this?.let { LocalDate.ofEpochDay(it) }
 
 fun LocalDate?.toEpochDayOrNull(): Long? = this?.toEpochDay()
 
-fun Instant.toEpochMillis(): Long = toEpochMilli()
-
 fun Instant.formatRelative(): String {
     val now = Instant.now()
     val seconds = (now.epochSecond - epochSecond).coerceAtLeast(0)
@@ -171,19 +174,59 @@ private fun List<Post>.filterBy(
 ): List<Post> {
     if (keyword.isBlank()) return emptyList()
     val lower = keyword.lowercase()
+    val queryTokens = tokenizeForSearch(keyword)
     return when (type) {
         PostSearchType.TAG -> filter { it.tag.equals(keyword, ignoreCase = true) }
         PostSearchType.AUTHOR -> filter {
             if (it.isAnonymous && it.author.id != currentUserId) return@filter false
-            it.author.name.lowercase().contains(lower) ||
-                    it.author.email.lowercase().contains(lower)
+            val authorTokens = tokenizeForSearch("${it.author.name} ${it.author.email}")
+            queryTokens.any { token -> authorTokens.any { authorPart -> isFuzzyMatch(token, authorPart) } }
         }
 
         PostSearchType.TITLE -> filter { it.title.lowercase().contains(lower) }
         PostSearchType.FULL_TEXT -> filter {
-            it.title.lowercase().contains(lower) || it.body.lowercase().contains(lower)
+            if (queryTokens.isEmpty()) return@filter false
+            val contentTokens = tokenizeForSearch("${it.title} ${it.body}")
+            queryTokens.all { token -> contentTokens.any { contentPart -> isFuzzyMatch(token, contentPart) } }
         }
     }
+}
+
+private fun tokenizeForSearch(text: String): List<String> =
+    text.lowercase().split(Regex("\\W+")).filter { it.isNotBlank() }
+
+private fun levenshteinDistance(a: String, b: String): Int {
+    if (a == b) return 0
+    if (a.isEmpty()) return b.length
+    if (b.isEmpty()) return a.length
+
+    val dp = Array(a.length + 1) { IntArray(b.length + 1) }
+    for (i in 0..a.length) dp[i][0] = i
+    for (j in 0..b.length) dp[0][j] = j
+
+    for (i in 1..a.length) {
+        for (j in 1..b.length) {
+            val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+            dp[i][j] = minOf(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost
+            )
+        }
+    }
+    return dp[a.length][b.length]
+}
+
+private fun isFuzzyMatch(query: String, target: String): Boolean {
+    if (query.isBlank() || target.isBlank()) return false
+    if (target.contains(query)) return true
+    val distance = levenshteinDistance(query, target)
+    val tolerance = when {
+        query.length <= 3 -> 1
+        query.length <= 6 -> 2
+        else -> 3
+    }
+    return distance <= tolerance || query.contains(target)
 }
 
 data class TagWatchHistory(

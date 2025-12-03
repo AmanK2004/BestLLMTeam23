@@ -162,20 +162,20 @@ class AppViewModel(
 
                 val requiresProfile = currentUser?.let { !it.isProfileComplete } == true
 
-                    CombinedData(
-                        currentUser = currentUser,
-                        requiresProfileSetup = requiresProfile,
-                        feedPosts = feedPosts,
-                        allPosts = allPosts,
-                        allPrompts = allPrompts,
-                        bookmarkedPosts = bookmarkedPosts,
-                        bookmarkedPrompts = bookmarkedPrompts,
-                        trending = trending,
-                        allUsers = allUsers,
-                        postVersions = postVersionsMap,
-                        promptVersions = promptVersionsMap,
-                        userId = userId
-                    )
+                CombinedData(
+                    currentUser = currentUser,
+                    requiresProfileSetup = requiresProfile,
+                    feedPosts = feedPosts,
+                    allPosts = allPosts,
+                    allPrompts = allPrompts,
+                    bookmarkedPosts = bookmarkedPosts,
+                    bookmarkedPrompts = bookmarkedPrompts,
+                    trending = trending,
+                    allUsers = allUsers,
+                    postVersions = postVersionsMap,
+                    promptVersions = promptVersionsMap,
+                    userId = userId
+                )
             }.collect { combinedData ->
                 _uiState.update { state ->
                     val updatedSearch = state.searchState.recompute(
@@ -571,10 +571,10 @@ class AppViewModel(
         }
     }
 
-    fun searchUsers(email: String) {
+    fun searchUsers(query: String) {
         _uiState.update { state ->
             val newSearch = state.searchState.copy(
-                userEmail = email
+                userQuery = query
             ).recompute(
                 state.allPosts,
                 state.prompts,

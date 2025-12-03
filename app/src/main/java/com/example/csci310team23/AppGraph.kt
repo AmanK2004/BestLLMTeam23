@@ -24,8 +24,8 @@ object AppGraph {
             promptDao = database.promptDao(),
             postVoteDao = database.postVoteDao(),
             commentVoteDao = database.commentVoteDao(),
-            tagWatchHistoryDao = database.tagWatchHistoryDao(), // Add this
-            userWatchHistoryDao = database.userWatchHistoryDao(), // Add this
+            tagWatchHistoryDao = database.tagWatchHistoryDao(),
+            userWatchHistoryDao = database.userWatchHistoryDao(),
             postBookmarkDao = database.postBookmarkDao(),
             promptBookmarkDao = database.promptBookmarkDao(),
             postVersionDao = database.postVersionDao(),

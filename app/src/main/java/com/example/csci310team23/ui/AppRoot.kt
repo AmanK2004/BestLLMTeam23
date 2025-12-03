@@ -1,5 +1,7 @@
 ﻿package com.example.csci310team23.ui
 
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.setValue
 import android.app.DatePickerDialog
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -7,6 +9,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +24,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
@@ -79,11 +83,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,26 +186,22 @@ fun AppRoot(
         }
 
         uiState.requiresProfileSetup -> {
-            currentUser.let { user ->
-                ProfileSetupScreen(
-                    user = user,
-                    onComplete = { department, school, birthDate, bio ->
-                        viewModel.completeProfile(department, school, birthDate, bio)
-                    },
-                    onLogout = viewModel::logout
-                )
-            }
+            ProfileSetupScreen(
+                user = currentUser,
+                onComplete = { department, school, birthDate, bio ->
+                    viewModel.completeProfile(department, school, birthDate, bio)
+                },
+                onLogout = viewModel::logout
+            )
         }
 
         else -> {
-            currentUser.let { user ->
-                MainScreen(
-                    currentUser = user,
-                    uiState = uiState,
-                    viewModel = viewModel,
-                    snackbarHostState = snackbarHostState
-                )
-            }
+            MainScreen(
+                currentUser = currentUser,
+                uiState = uiState,
+                viewModel = viewModel,
+                snackbarHostState = snackbarHostState
+            )
         }
     }
 }
@@ -548,9 +550,8 @@ private fun ProfileSetupScreen(
 
 private enum class MainSection(val title: String) {
     FEED("Feed"),
-    TRENDING("Trending"),
+    DISCOVER("Discover"),
     PROMPTS("Prompts"),
-    SAVED("Bookmarks"),
     SEARCH("Search"),
     PROFILE("Profile")
 }
@@ -563,7 +564,7 @@ private fun MainScreen(
     viewModel: AppViewModel,
     snackbarHostState: SnackbarHostState
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf(MainSection.PROMPTS) }
+    var selectedSection by rememberSaveable { mutableStateOf(MainSection.FEED) }
 
     Scaffold(
         topBar = {
@@ -575,14 +576,13 @@ private fun MainScreen(
         bottomBar = {
             NavigationBar {
                 MainSection.values().forEach { section ->
-                      val icon = when (section) {
-                          MainSection.FEED -> Icons.Filled.Home
-                          MainSection.TRENDING -> Icons.Outlined.Whatshot
-                          MainSection.PROMPTS -> Icons.Outlined.Article
-                          MainSection.SAVED -> Icons.Filled.Bookmark
-                          MainSection.SEARCH -> Icons.Filled.Search
-                          MainSection.PROFILE -> Icons.Filled.Person
-                      }
+                    val icon = when (section) {
+                        MainSection.FEED -> Icons.Filled.Home
+                        MainSection.DISCOVER -> Icons.Outlined.Whatshot
+                        MainSection.PROMPTS -> Icons.Outlined.Article
+                        MainSection.SEARCH -> Icons.Filled.Search
+                        MainSection.PROFILE -> Icons.Filled.Person
+                    }
                     NavigationBarItem(
                         selected = section == selectedSection,
                         onClick = { selectedSection = section },
@@ -598,57 +598,55 @@ private fun MainScreen(
             MainSection.FEED -> FeedSection(
                 modifier = Modifier.padding(innerPadding),
                 currentUser = currentUser,
-                  posts = uiState.posts,
-                  isFeedRefreshing = uiState.isFeedRefreshing,
-                  onCreatePost = { title, body, tag, isDraft, isAnonymous ->
-                      viewModel.createPost(title, body, tag, isDraft, isAnonymous)
-                  },
-                  onUpdatePost = viewModel::updatePost,
-                  onDeletePost = viewModel::deletePost,
-                  onPublishDraft = viewModel::publishDraft,
-                  onCreateComment = viewModel::createComment,
-                  onUpdateComment = viewModel::updateComment,
-                  onVotePost = viewModel::voteOnPost,
-                  onVoteComment = viewModel::voteOnComment,
-                  onWatchTag = viewModel::watchTag,
-                  onWatchUser = viewModel::watchUser,
-                  watchedTagsHistory = uiState.watchedTagsHistory,
-                  watchedUsersHistory = uiState.watchedUsersHistory,
-                  allUsers = uiState.allUsers,
-                  postVersions = uiState.postVersions,
-                  onToggleBookmark = viewModel::togglePostBookmark
-              )
+                posts = uiState.posts,
+                isFeedRefreshing = uiState.isFeedRefreshing,
+                onCreatePost = { title, body, tag, isDraft, isAnonymous ->
+                    viewModel.createPost(title, body, tag, isDraft, isAnonymous)
+                },
+                onUpdatePost = viewModel::updatePost,
+                onDeletePost = viewModel::deletePost,
+                onPublishDraft = viewModel::publishDraft,
+                onCreateComment = viewModel::createComment,
+                onUpdateComment = viewModel::updateComment,
+                onVotePost = viewModel::voteOnPost,
+                onVoteComment = viewModel::voteOnComment,
+                onWatchTag = viewModel::watchTag,
+                onWatchUser = viewModel::watchUser,
+                watchedTagsHistory = uiState.watchedTagsHistory,
+                watchedUsersHistory = uiState.watchedUsersHistory,
+                allUsers = uiState.allUsers,
+                postVersions = uiState.postVersions,
+                onToggleBookmark = viewModel::togglePostBookmark
+            )
 
-              MainSection.TRENDING -> TrendingSection(
-                  modifier = Modifier.padding(innerPadding),
-                  posts = uiState.trending,
-                  currentUser = currentUser,
-                  onVotePost = viewModel::voteOnPost,
-                  onVoteComment = viewModel::voteOnComment,
-                  onToggleBookmark = viewModel::togglePostBookmark,
-                  postVersions = uiState.postVersions
-              )
+            MainSection.DISCOVER -> DiscoverSection(
+                modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
+                trendingPosts = uiState.trending,
+                bookmarkedPosts = uiState.bookmarkedPosts,
+                bookmarkedPrompts = uiState.bookmarkedPrompts,
+                postVersions = uiState.postVersions,
+                promptVersions = uiState.promptVersions,
+                onVotePost = viewModel::voteOnPost,
+                onVoteComment = viewModel::voteOnComment,
+                onPublishDraft = viewModel::publishDraft,
+                onDeletePost = viewModel::deletePost,
+                onUpdatePost = viewModel::updatePost,
+                onUpdatePrompt = viewModel::updatePrompt,
+                onDeletePrompt = viewModel::deletePrompt,
+                onCreateComment = viewModel::createComment,
+                onUpdateComment = viewModel::updateComment,
+                onTogglePostBookmark = viewModel::togglePostBookmark,
+                onTogglePromptBookmark = viewModel::togglePromptBookmark
+            )
 
-              MainSection.PROMPTS -> PromptSection(
-                  modifier = Modifier.padding(innerPadding),
-                  currentUser = currentUser,
-                  allPrompts = uiState.prompts,
-                  promptVersions = uiState.promptVersions,
-                  onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
-                      viewModel.createPrompt(
-                          title,
-                          description,
-                          content,
-                        tag,
-                        temperature,
-                        context,
-                        memoryTokens,
-                        isPrivate
-                      )
-                  },
-                  onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
-                      viewModel.updatePrompt(
-                          id,
+            MainSection.PROMPTS -> PromptSection(
+                modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
+                allPrompts = uiState.prompts,
+                promptVersions = uiState.promptVersions,
+                onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                    viewModel.createPrompt(
                         title,
                         description,
                         content,
@@ -656,36 +654,17 @@ private fun MainScreen(
                         temperature,
                         context,
                         memoryTokens,
-                          isPrivate
-                      )
-                  },
-                  onDeletePrompt = viewModel::deletePrompt,
-                  onTogglePromptBookmark = viewModel::togglePromptBookmark
-              )
+                        isPrivate
+                    )
+                },
+                onUpdatePrompt = viewModel::updatePrompt,
+                onDeletePrompt = viewModel::deletePrompt,
+                onTogglePromptBookmark = viewModel::togglePromptBookmark
+            )
 
-              MainSection.SAVED -> BookmarkSection(
-                  modifier = Modifier.padding(innerPadding),
-                  currentUser = currentUser,
-                  bookmarkedPosts = uiState.bookmarkedPosts,
-                  bookmarkedPrompts = uiState.bookmarkedPrompts,
-                  postVersions = uiState.postVersions,
-                  promptVersions = uiState.promptVersions,
-                  onVotePost = viewModel::voteOnPost,
-                  onVoteComment = viewModel::voteOnComment,
-                  onPublishDraft = viewModel::publishDraft,
-                  onDeletePost = viewModel::deletePost,
-                  onUpdatePost = viewModel::updatePost,
-                  onUpdatePrompt = viewModel::updatePrompt,
-                  onDeletePrompt = viewModel::deletePrompt,
-                  onCreateComment = viewModel::createComment,
-                  onUpdateComment = viewModel::updateComment,
-                  onTogglePostBookmark = viewModel::togglePostBookmark,
-                  onTogglePromptBookmark = viewModel::togglePromptBookmark
-              )
-
-              MainSection.SEARCH -> SearchSection(
-                  modifier = Modifier.padding(innerPadding),
-                  currentUser = currentUser,
+            MainSection.SEARCH -> SearchSection(
+                modifier = Modifier.padding(innerPadding),
+                currentUser = currentUser,
                 posts = uiState.searchState.postResults,
                 prompts = uiState.searchState.promptResults,
                 users = uiState.searchState.userResults,
@@ -1220,6 +1199,93 @@ private fun PromptSection(
 }
 
 @Composable
+private fun DiscoverSection(
+    modifier: Modifier = Modifier,
+    currentUser: UserProfile?,
+    trendingPosts: List<Post>,
+    bookmarkedPosts: List<Post>,
+    bookmarkedPrompts: List<Prompt>,
+    postVersions: Map<Long, List<PostVersion>>,
+    promptVersions: Map<Long, List<PromptVersion>>,
+    onVotePost: (Long, Int) -> Unit,
+    onVoteComment: (Long, Int) -> Unit,
+    onPublishDraft: (Long) -> Unit,
+    onDeletePost: (Long) -> Unit,
+    onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onDeletePrompt: (Long) -> Unit,
+    onCreateComment: (Long, String?, String) -> Unit,
+    onUpdateComment: (Long, String?, String) -> Unit,
+    onTogglePostBookmark: (Long) -> Unit,
+    onTogglePromptBookmark: (Long) -> Unit
+) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Discover",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Trending content and your saved library",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = { Text("Trending") }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = { Text("Saved") }
+                )
+            }
+        }
+
+        when (selectedTab) {
+            0 -> TrendingSection(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                posts = trendingPosts,
+                currentUser = currentUser,
+                onVotePost = onVotePost,
+                onVoteComment = onVoteComment,
+                onToggleBookmark = onTogglePostBookmark,
+                postVersions = postVersions
+            )
+
+            else -> BookmarkSection(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                currentUser = currentUser,
+                bookmarkedPosts = bookmarkedPosts,
+                bookmarkedPrompts = bookmarkedPrompts,
+                postVersions = postVersions,
+                promptVersions = promptVersions,
+                onVotePost = onVotePost,
+                onVoteComment = onVoteComment,
+                onPublishDraft = onPublishDraft,
+                onDeletePost = onDeletePost,
+                onUpdatePost = onUpdatePost,
+                onUpdatePrompt = onUpdatePrompt,
+                onDeletePrompt = onDeletePrompt,
+                onCreateComment = onCreateComment,
+                onUpdateComment = onUpdateComment,
+                onTogglePostBookmark = onTogglePostBookmark,
+                onTogglePromptBookmark = onTogglePromptBookmark
+            )
+        }
+    }
+}
+
+@Composable
 private fun BookmarkSection(
     modifier: Modifier = Modifier,
     currentUser: UserProfile?,
@@ -1240,6 +1306,8 @@ private fun BookmarkSection(
     onTogglePromptBookmark: (Long) -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var tagFilter by rememberSaveable { mutableStateOf("") }
+    var tagExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1270,12 +1338,53 @@ private fun BookmarkSection(
                         text = { Text("Prompts") }
                     )
                 }
+
+                @OptIn(ExperimentalMaterial3Api::class)
+                ExposedDropdownMenuBox(
+                    expanded = tagExpanded,
+                    onExpandedChange = { tagExpanded = !tagExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = tagFilter.ifBlank { "All models" },
+                        onValueChange = { tagFilter = it },
+                        label = { Text("Filter by LLM tag") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        readOnly = true
+                    )
+                    ExposedDropdownMenu(
+                        expanded = tagExpanded,
+                        onDismissRequest = { tagExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All models") },
+                            onClick = {
+                                tagFilter = ""
+                                tagExpanded = false
+                            }
+                        )
+                        AI_AGENTS.forEach { agent ->
+                            DropdownMenuItem(
+                                text = { Text(agent) },
+                                onClick = {
+                                    tagFilter = agent
+                                    tagExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
 
         when (selectedTab) {
             0 -> {
-                items(bookmarkedPosts, key = { it.id }) { post ->
+                val filteredPosts = bookmarkedPosts.filter { post ->
+                    tagFilter.isBlank() || post.tag.equals(tagFilter, ignoreCase = true)
+                }
+                items(filteredPosts, key = { it.id }) { post ->
                     PostCard(
                         post = post,
                         currentUser = currentUser,
@@ -1292,7 +1401,7 @@ private fun BookmarkSection(
                         showVoting = post.isPublished
                     )
                 }
-                if (bookmarkedPosts.isEmpty()) {
+                if (filteredPosts.isEmpty()) {
                     item {
                         Text(
                             text = "No saved posts yet. Tap the bookmark icon to save posts.",
@@ -1304,7 +1413,10 @@ private fun BookmarkSection(
             }
 
             1 -> {
-                items(bookmarkedPrompts, key = { it.id }) { prompt ->
+                val filteredPrompts = bookmarkedPrompts.filter { prompt ->
+                    tagFilter.isBlank() || prompt.tag.equals(tagFilter, ignoreCase = true)
+                }
+                items(filteredPrompts, key = { it.id }) { prompt ->
                     PromptCard(
                         prompt = prompt,
                         canEdit = currentUser?.id == prompt.author.id,
@@ -1316,7 +1428,7 @@ private fun BookmarkSection(
                         versions = promptVersions[prompt.id].orEmpty()
                     )
                 }
-                if (bookmarkedPrompts.isEmpty()) {
+                if (filteredPrompts.isEmpty()) {
                     item {
                         Text(
                             text = "No saved prompts yet. Bookmark prompts to build your library.",
@@ -1348,7 +1460,7 @@ private fun SearchSection(
     var tagExpanded by remember { mutableStateOf(false) }
     var promptTag by rememberSaveable { mutableStateOf("") }
     var promptTagExpanded by remember { mutableStateOf(false) }
-    var userEmail by rememberSaveable { mutableStateOf("") }
+    var userQuery by rememberSaveable { mutableStateOf("") }
     var postSearched by rememberSaveable { mutableStateOf(false) }
     var promptSearched by rememberSaveable { mutableStateOf(false) }
     var userSearched by rememberSaveable { mutableStateOf(false) }
@@ -1558,9 +1670,9 @@ private fun SearchSection(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         OutlinedTextField(
-                            value = userEmail,
-                            onValueChange = { userEmail = it },
-                            label = { Text("USC Email") },
+                            value = userQuery,
+                            onValueChange = { userQuery = it },
+                            label = { Text("Name or Email") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("search_user_email_field")
@@ -1568,7 +1680,7 @@ private fun SearchSection(
                         Button(
                             onClick = {
                                 userSearched = true
-                                onSearchUsers(userEmail)
+                                onSearchUsers(userQuery)
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2124,11 +2236,27 @@ private fun PostCard(
     var showHistory by remember { mutableStateOf(false) }
 
     val isOwnPost = currentUser?.id == post.author.id
-    val displayName = if (post.isAnonymous && !isOwnPost) "Anonymous" else post.author.name
+    val displayName = if (post.isAnonymous && !isOwnPost) "Anon" else post.author.name
+    val postTimeline = remember(versions, post) {
+        (versions + post.toCurrentVersionSnapshot()).sortedBy { it.createdAt }
+    }
+    val numberedPostVersions = remember(postTimeline) {
+        postTimeline.mapIndexed { index, version ->
+            VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
+        }
+    }
+    var advancedHistory by remember { mutableStateOf(false) }
+    var baseVersionIndex by remember { mutableIntStateOf((numberedPostVersions.size - 2).coerceAtLeast(0)) }
+    var compareVersionIndex by remember { mutableIntStateOf(numberedPostVersions.lastIndex.coerceAtLeast(0)) }
+
+    LaunchedEffect(numberedPostVersions.size) {
+        baseVersionIndex = (numberedPostVersions.size - 2).coerceAtLeast(0)
+        compareVersionIndex = numberedPostVersions.lastIndex.coerceAtLeast(0)
+    }
 
     BaseContentCard(modifier = Modifier.testTag("post_card")) {
         Row(
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -2156,22 +2284,32 @@ private fun PostCard(
                             )
                         }
                     }
+                    if (post.isAnonymous) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.testTag("post_anonymous_badge")
+                        ) {
+                            Text(
+                                text = "ANON",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.size(4.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "$displayName • ${post.createdAt.formatRelative()}",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    if (post.isAnonymous) {
-                        Text(
-                            text = "(anonymous)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                     if (post.isEdited) {
                         Text(
                             text = "(edited)",
@@ -2182,8 +2320,8 @@ private fun PostCard(
                 }
             }
             Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(start = 8.dp)
             ) {
                 Text(
@@ -2254,11 +2392,6 @@ private fun PostCard(
                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
                         )
                     }
-                } else {
-                    Text(
-                        text = "#${post.tag}",
-                        style = MaterialTheme.typography.labelLarge
-                    )
                 }
             }
         }
@@ -2286,7 +2419,8 @@ private fun PostCard(
             )
         }
 
-        if (versions.isNotEmpty()) {
+        val totalVersions = postTimeline.size
+        if (totalVersions > 0 && (versions.isNotEmpty() || post.isEdited)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -2294,7 +2428,7 @@ private fun PostCard(
                 TextButton(onClick = { showHistory = true }) {
                     Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("History (${versions.size})")
+                    Text("History ($totalVersions)")
                 }
             }
         }
@@ -2386,39 +2520,94 @@ private fun PostCard(
             },
             title = { Text("Post Version History") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    versions.forEach { version ->
-                        OutlinedCard {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !advancedHistory,
+                            onClick = { advancedHistory = false },
+                            label = { Text("Timeline") }
+                        )
+                        FilterChip(
+                            selected = advancedHistory,
+                            onClick = { advancedHistory = true },
+                            label = { Text("Advanced diff") }
+                        )
+                    }
+
+                    if (advancedHistory) {
+                        if (numberedPostVersions.size < 2) {
+                            Text(
+                                text = "Make at least one edit to compare versions.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            VersionSelector(
+                                label = "Base version",
+                                options = numberedPostVersions,
+                                selectedIndex = baseVersionIndex,
+                                onSelected = { selection ->
+                                    baseVersionIndex = selection.coerceIn(numberedPostVersions.indices)
+                                }
+                            )
+                            VersionSelector(
+                                label = "Compare to",
+                                options = numberedPostVersions,
+                                selectedIndex = compareVersionIndex,
+                                onSelected = { selection ->
+                                    compareVersionIndex = selection.coerceIn(numberedPostVersions.indices)
+                                }
+                            )
+
+                            val baseVersion = postTimeline.getOrElse(baseVersionIndex) { postTimeline.last() }
+                            val compareVersion = postTimeline.getOrElse(compareVersionIndex) { postTimeline.last() }
+
+                            DiffBlock(
+                                title = "Title",
+                                before = baseVersion.title,
+                                after = compareVersion.title
+                            )
+                            DiffBlock(
+                                title = "Body",
+                                before = baseVersion.body,
+                                after = compareVersion.body
+                            )
+                            DiffBlock(
+                                title = "AI Model",
+                                before = "#${baseVersion.tag}",
+                                after = "#${compareVersion.tag}"
+                            )
+                        }
+                    } else {
+                        val numberedTimeline = postTimeline.mapIndexed { index, version -> index + 1 to version }
+                        numberedTimeline.reversed().forEach { (number, version) ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(
-                                    text = version.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = "${version.createdAt.formatRelative()} • #${version.tag}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = version.body,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "Version $number${if (number == numberedTimeline.size) " (current)" else ""}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${version.createdAt.formatRelative()} • #${version.tag}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = version.body,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
                             }
                         }
-                    }
-                    if (versions.isEmpty()) {
-                        Text(
-                            text = "No previous versions yet.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
                     }
                 }
             }
@@ -2920,7 +3109,7 @@ private fun CreatePromptCard(
                     onCheckedChange = { isPrivate = it },
                     modifier = Modifier.testTag("create_prompt_private_checkbox")
                 )
-                Text("Save as Private Draft (only you can see)")
+                Text("Save as Private Prompt (only you can see)")
             }
 
             error?.let {
@@ -2976,6 +3165,22 @@ private fun PromptCard(
     var showMenu by remember { mutableStateOf(false) }
     var showOptional by rememberSaveable(prompt.id) { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    val promptTimeline = remember(versions, prompt) {
+        (versions + prompt.toCurrentVersionSnapshot()).sortedBy { it.createdAt }
+    }
+    val numberedPromptVersions = remember(promptTimeline) {
+        promptTimeline.mapIndexed { index, version ->
+            VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
+        }
+    }
+    var promptAdvancedHistory by remember { mutableStateOf(false) }
+    var promptBaseIndex by remember { mutableIntStateOf((numberedPromptVersions.size - 2).coerceAtLeast(0)) }
+    var promptCompareIndex by remember { mutableIntStateOf(numberedPromptVersions.lastIndex.coerceAtLeast(0)) }
+
+    LaunchedEffect(numberedPromptVersions.size) {
+        promptBaseIndex = (numberedPromptVersions.size - 2).coerceAtLeast(0)
+        promptCompareIndex = numberedPromptVersions.lastIndex.coerceAtLeast(0)
+    }
 
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
             !prompt.context.isNullOrBlank() ||
@@ -2986,7 +3191,7 @@ private fun PromptCard(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(
@@ -3016,7 +3221,10 @@ private fun PromptCard(
 
                 Spacer(modifier = Modifier.size(4.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
                         style = MaterialTheme.typography.bodySmall
@@ -3031,8 +3239,8 @@ private fun PromptCard(
                 }
             }
             Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.End
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "#${prompt.tag}",
@@ -3132,7 +3340,8 @@ private fun PromptCard(
             }
         }
 
-        if (versions.isNotEmpty()) {
+        val totalPromptVersions = promptTimeline.size
+        if (totalPromptVersions > 0 && (versions.isNotEmpty() || prompt.isEdited)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
@@ -3140,7 +3349,7 @@ private fun PromptCard(
                 TextButton(onClick = { showHistory = true }) {
                     Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("History (${versions.size})")
+                    Text("History ($totalPromptVersions)")
                 }
             }
         }
@@ -3152,40 +3361,122 @@ private fun PromptCard(
             confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Close") } },
             title = { Text("Prompt Version History") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    versions.forEach { version ->
-                        OutlinedCard {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !promptAdvancedHistory,
+                            onClick = { promptAdvancedHistory = false },
+                            label = { Text("Timeline") }
+                        )
+                        FilterChip(
+                            selected = promptAdvancedHistory,
+                            onClick = { promptAdvancedHistory = true },
+                            label = { Text("Advanced diff") }
+                        )
+                    }
+
+                    if (promptAdvancedHistory) {
+                        if (numberedPromptVersions.size < 2) {
+                            Text(
+                                text = "Make at least one edit to compare versions.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            VersionSelector(
+                                label = "Base version",
+                                options = numberedPromptVersions,
+                                selectedIndex = promptBaseIndex,
+                                onSelected = { selection ->
+                                    promptBaseIndex = selection.coerceIn(numberedPromptVersions.indices)
+                                }
+                            )
+                            VersionSelector(
+                                label = "Compare to",
+                                options = numberedPromptVersions,
+                                selectedIndex = promptCompareIndex,
+                                onSelected = { selection ->
+                                    promptCompareIndex = selection.coerceIn(numberedPromptVersions.indices)
+                                }
+                            )
+
+                            val baseVersion = promptTimeline.getOrElse(promptBaseIndex) { promptTimeline.last() }
+                            val compareVersion = promptTimeline.getOrElse(promptCompareIndex) { promptTimeline.last() }
+
+                            DiffBlock(
+                                title = "Title",
+                                before = baseVersion.title,
+                                after = compareVersion.title
+                            )
+                            DiffBlock(
+                                title = "Description",
+                                before = baseVersion.description.ifBlank { "(empty)" },
+                                after = compareVersion.description.ifBlank { "(empty)" }
+                            )
+                            DiffBlock(
+                                title = "Prompt Text",
+                                before = baseVersion.content,
+                                after = compareVersion.content
+                            )
+                            DiffBlock(
+                                title = "AI Model",
+                                before = "#${baseVersion.tag}",
+                                after = "#${compareVersion.tag}"
+                            )
+                            DiffBlock(
+                                title = "Temperature",
+                                before = baseVersion.temperature ?: "—",
+                                after = compareVersion.temperature ?: "—"
+                            )
+                            DiffBlock(
+                                title = "Context",
+                                before = baseVersion.context ?: "—",
+                                after = compareVersion.context ?: "—"
+                            )
+                            DiffBlock(
+                                title = "Memory Tokens",
+                                before = baseVersion.memoryTokens ?: "—",
+                                after = compareVersion.memoryTokens ?: "—"
+                            )
+                        }
+                    } else {
+                        val numberedTimeline = promptTimeline.mapIndexed { index, version -> index + 1 to version }
+                        numberedTimeline.reversed().forEach { (number, version) ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text(version.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    text = "${version.createdAt.formatRelative()} • #${version.tag}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                if (version.description.isNotBlank()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
                                     Text(
-                                        text = version.description,
-                                        maxLines = 2,
+                                        text = "Version $number${if (number == numberedTimeline.size) " (current)" else ""}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${version.createdAt.formatRelative()} • #${version.tag}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (version.description.isNotBlank()) {
+                                        Text(
+                                            text = version.description,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    Text(
+                                        text = version.content,
+                                        maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
-                                Text(
-                                    text = version.content,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall
-                                )
                             }
                         }
-                    }
-                    if (versions.isEmpty()) {
-                        Text("No previous versions yet.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -3528,7 +3819,7 @@ private fun PromptSearchCard(
 
 @Composable
 private fun PostSummaryCard(post: Post) {
-    val displayName = if (post.isAnonymous) "Anonymous" else post.author.name
+    val displayName = if (post.isAnonymous) "Anon" else post.author.name
     BaseContentCard(modifier = Modifier.testTag("post_summary_card")) {
         Text(
             text = post.title,
@@ -3729,3 +4020,169 @@ private fun LoadingPostCard() {
         }
     }
 }
+
+private data class VersionOption(val index: Int, val label: String)
+
+private enum class DiffType { ADDED, REMOVED, UNCHANGED }
+
+private data class DiffLine(val type: DiffType, val content: String)
+
+private fun buildDiffLines(before: String, after: String): List<DiffLine> {
+    val oldLines = before.lines()
+    val newLines = after.lines()
+    val lcs = Array(oldLines.size + 1) { IntArray(newLines.size + 1) }
+
+    for (i in oldLines.indices.reversed()) {
+        for (j in newLines.indices.reversed()) {
+            lcs[i][j] = if (oldLines[i] == newLines[j]) {
+                1 + lcs[i + 1][j + 1]
+            } else {
+                maxOf(lcs[i + 1][j], lcs[i][j + 1])
+            }
+        }
+    }
+
+    val result = mutableListOf<DiffLine>()
+    var i = 0
+    var j = 0
+    while (i < oldLines.size && j < newLines.size) {
+        when {
+            oldLines[i] == newLines[j] -> {
+                result.add(DiffLine(DiffType.UNCHANGED, oldLines[i]))
+                i++
+                j++
+            }
+
+            lcs[i + 1][j] >= lcs[i][j + 1] -> {
+                result.add(DiffLine(DiffType.REMOVED, oldLines[i]))
+                i++
+            }
+
+            else -> {
+                result.add(DiffLine(DiffType.ADDED, newLines[j]))
+                j++
+            }
+        }
+    }
+
+    while (i < oldLines.size) {
+        result.add(DiffLine(DiffType.REMOVED, oldLines[i]))
+        i++
+    }
+
+    while (j < newLines.size) {
+        result.add(DiffLine(DiffType.ADDED, newLines[j]))
+        j++
+    }
+
+    return result
+}
+
+@Composable
+private fun DiffBlock(title: String, before: String, after: String) {
+    val diffLines = remember(before, after) { buildDiffLines(before, after) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.medium)
+                .horizontalScroll(rememberScrollState())
+        ) {
+            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                diffLines.forEach { line ->
+                    val background = when (line.type) {
+                        DiffType.ADDED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+                        DiffType.REMOVED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                        DiffType.UNCHANGED -> Color.Transparent
+                    }
+                    val prefix = when (line.type) {
+                        DiffType.ADDED -> "+"
+                        DiffType.REMOVED -> "-"
+                        DiffType.UNCHANGED -> " "
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(background)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(prefix, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = line.content.ifBlank { " " },
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VersionSelector(
+    label: String,
+    options: List<VersionOption>,
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = options.getOrNull(selectedIndex)?.label ?: label
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = {
+                        onSelected(option.index)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun Post.toCurrentVersionSnapshot(): PostVersion = PostVersion(
+    id = -1,
+    postId = id,
+    title = title,
+    body = body,
+    tag = tag,
+    createdAt = updatedAt
+)
+
+private fun Prompt.toCurrentVersionSnapshot(): PromptVersion = PromptVersion(
+    id = -1,
+    promptId = id,
+    title = title,
+    description = description,
+    content = content,
+    tag = tag,
+    temperature = temperature,
+    context = context,
+    memoryTokens = memoryTokens,
+    createdAt = updatedAt
+)
