@@ -1305,9 +1305,10 @@ private fun BookmarkSection(
     onTogglePostBookmark: (Long) -> Unit,
     onTogglePromptBookmark: (Long) -> Unit
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var tagFilter by rememberSaveable { mutableStateOf("") }
     var tagExpanded by remember { mutableStateOf(false) }
+    var contentTypeFilter by rememberSaveable { mutableStateOf("All") }
+    var contentTypeExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1322,121 +1323,163 @@ private fun BookmarkSection(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Saved posts and prompts to revisit later",
+                    text = "Saved posts and prompts",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TabRow(selectedTabIndex = selectedTab) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("Posts") }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Prompts") }
-                    )
-                }
 
-                @OptIn(ExperimentalMaterial3Api::class)
-                ExposedDropdownMenuBox(
-                    expanded = tagExpanded,
-                    onExpandedChange = { tagExpanded = !tagExpanded }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = tagFilter.ifBlank { "All models" },
-                        onValueChange = { tagFilter = it },
-                        label = { Text("Filter by LLM tag") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        readOnly = true
-                    )
-                    ExposedDropdownMenu(
-                        expanded = tagExpanded,
-                        onDismissRequest = { tagExpanded = false }
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    ExposedDropdownMenuBox(
+                        expanded = contentTypeExpanded,
+                        onExpandedChange = { contentTypeExpanded = !contentTypeExpanded },
+                        modifier = Modifier.weight(1f)
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("All models") },
-                            onClick = {
-                                tagFilter = ""
-                                tagExpanded = false
-                            }
+                        OutlinedTextField(
+                            value = contentTypeFilter,
+                            onValueChange = { },
+                            label = { Text("Type") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = contentTypeExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            readOnly = true
                         )
-                        AI_AGENTS.forEach { agent ->
+                        ExposedDropdownMenu(
+                            expanded = contentTypeExpanded,
+                            onDismissRequest = { contentTypeExpanded = false }
+                        ) {
+                            listOf("All", "Posts", "Prompts").forEach { type ->
+                                DropdownMenuItem(
+                                    text = { Text(type) },
+                                    onClick = {
+                                        contentTypeFilter = type
+                                        contentTypeExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    ExposedDropdownMenuBox(
+                        expanded = tagExpanded,
+                        onExpandedChange = { tagExpanded = !tagExpanded },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = tagFilter.ifBlank { "All models" },
+                            onValueChange = { tagFilter = it },
+                            label = { Text("AI Model") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = tagExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            readOnly = true
+                        )
+                        ExposedDropdownMenu(
+                            expanded = tagExpanded,
+                            onDismissRequest = { tagExpanded = false }
+                        ) {
                             DropdownMenuItem(
-                                text = { Text(agent) },
+                                text = { Text("All models") },
                                 onClick = {
-                                    tagFilter = agent
+                                    tagFilter = ""
                                     tagExpanded = false
                                 }
                             )
+                            AI_AGENTS.forEach { agent ->
+                                DropdownMenuItem(
+                                    text = { Text(agent) },
+                                    onClick = {
+                                        tagFilter = agent
+                                        tagExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        when (selectedTab) {
-            0 -> {
-                val filteredPosts = bookmarkedPosts.filter { post ->
-                    tagFilter.isBlank() || post.tag.equals(tagFilter, ignoreCase = true)
-                }
-                items(filteredPosts, key = { it.id }) { post ->
-                    PostCard(
-                        post = post,
-                        currentUser = currentUser,
-                        onUpdatePost = onUpdatePost,
-                        onDeletePost = onDeletePost,
-                        onPublishDraft = onPublishDraft,
-                        onCreateComment = onCreateComment,
-                        onUpdateComment = onUpdateComment,
-                        onVotePost = onVotePost,
-                        onVoteComment = onVoteComment,
-                        onToggleBookmark = onTogglePostBookmark,
-                        versions = postVersions[post.id].orEmpty(),
-                        enableCommentComposer = currentUser != null,
-                        showVoting = post.isPublished
-                    )
-                }
-                if (filteredPosts.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No saved posts yet. Tap the bookmark icon to save posts.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
-                }
+        val filteredPosts = bookmarkedPosts.filter { post ->
+            val matchesType = contentTypeFilter == "All" || contentTypeFilter == "Posts"
+            val matchesTag = tagFilter.isBlank() || post.tag.equals(tagFilter, ignoreCase = true)
+            matchesType && matchesTag
+        }
+
+        val filteredPrompts = bookmarkedPrompts.filter { prompt ->
+            val matchesType = contentTypeFilter == "All" || contentTypeFilter == "Prompts"
+            val matchesTag = tagFilter.isBlank() || prompt.tag.equals(tagFilter, ignoreCase = true)
+            matchesType && matchesTag
+        }
+
+        if (filteredPosts.isNotEmpty() && (contentTypeFilter == "All" || contentTypeFilter == "Posts")) {
+            item {
+                Text(
+                    text = "Posts (${filteredPosts.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
 
-            1 -> {
-                val filteredPrompts = bookmarkedPrompts.filter { prompt ->
-                    tagFilter.isBlank() || prompt.tag.equals(tagFilter, ignoreCase = true)
-                }
-                items(filteredPrompts, key = { it.id }) { prompt ->
-                    PromptCard(
-                        prompt = prompt,
-                        canEdit = currentUser?.id == prompt.author.id,
-                        onUpdatePrompt = { id, title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
-                            onUpdatePrompt(id, title, description, content, tag, temperature, context, memoryTokens, isPrivate)
-                        },
-                        onDeletePrompt = onDeletePrompt,
-                        onToggleBookmark = onTogglePromptBookmark,
-                        versions = promptVersions[prompt.id].orEmpty()
-                    )
-                }
-                if (filteredPrompts.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No saved prompts yet. Bookmark prompts to build your library.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(top = 12.dp)
-                        )
-                    }
-                }
+            items(filteredPosts, key = { it.id }) { post ->
+                PostCard(
+                    post = post,
+                    currentUser = currentUser,
+                    onUpdatePost = onUpdatePost,
+                    onDeletePost = onDeletePost,
+                    onPublishDraft = onPublishDraft,
+                    onCreateComment = onCreateComment,
+                    onUpdateComment = onUpdateComment,
+                    onVotePost = onVotePost,
+                    onVoteComment = onVoteComment,
+                    onToggleBookmark = onTogglePostBookmark,
+                    versions = postVersions[post.id].orEmpty(),
+                    enableCommentComposer = currentUser != null,
+                    showVoting = post.isPublished
+                )
+            }
+        }
+
+        if (filteredPrompts.isNotEmpty() && (contentTypeFilter == "All" || contentTypeFilter == "Prompts")) {
+            item {
+                Text(
+                    text = "Prompts (${filteredPrompts.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = if (filteredPosts.isNotEmpty()) 16.dp else 8.dp)
+                )
+            }
+
+            items(filteredPrompts, key = { it.id }) { prompt ->
+                PromptCard(
+                    prompt = prompt,
+                    canEdit = currentUser?.id == prompt.author.id,
+                    onUpdatePrompt = onUpdatePrompt,
+                    onDeletePrompt = onDeletePrompt,
+                    onToggleBookmark = onTogglePromptBookmark,
+                    versions = promptVersions[prompt.id].orEmpty()
+                )
+            }
+        }
+
+        if (filteredPosts.isEmpty() && filteredPrompts.isEmpty()) {
+            item {
+                Text(
+                    text = if (bookmarkedPosts.isEmpty() && bookmarkedPrompts.isEmpty()) {
+                        "No bookmarks yet. Tap the bookmark icon to save posts and prompts."
+                    } else {
+                        "No items match your filters."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
             }
         }
     }
@@ -2245,13 +2288,13 @@ private fun PostCard(
             VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
         }
     }
-    var advancedHistory by remember { mutableStateOf(false) }
-    var baseVersionIndex by remember { mutableIntStateOf((numberedPostVersions.size - 2).coerceAtLeast(0)) }
-    var compareVersionIndex by remember { mutableIntStateOf(numberedPostVersions.lastIndex.coerceAtLeast(0)) }
 
-    LaunchedEffect(numberedPostVersions.size) {
-        baseVersionIndex = (numberedPostVersions.size - 2).coerceAtLeast(0)
-        compareVersionIndex = numberedPostVersions.lastIndex.coerceAtLeast(0)
+    var advancedHistory by remember { mutableStateOf(false) }
+    var baseVersionIndex by remember(numberedPostVersions) {
+        mutableIntStateOf((numberedPostVersions.size - 2).coerceAtLeast(0))
+    }
+    var compareVersionIndex by remember(numberedPostVersions) {
+        mutableIntStateOf(numberedPostVersions.lastIndex.coerceAtLeast(0))
     }
 
     BaseContentCard(modifier = Modifier.testTag("post_card")) {
@@ -2599,6 +2642,36 @@ private fun PostCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+
+                                    if (number > 1) {
+                                        val prevVersion = numberedTimeline.firstOrNull { it.first == number - 1 }?.second
+                                        if (prevVersion != null) {
+                                            val changes = mutableListOf<String>()
+                                            if (version.title != prevVersion.title) changes.add("title")
+                                            if (version.body != prevVersion.body) changes.add("content")
+                                            if (version.tag != prevVersion.tag) changes.add("tag")
+
+                                            if (changes.isNotEmpty()) {
+                                                Text(
+                                                    text = "Changed: ${changes.joinToString(", ")}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (version.title != post.title) {
+                                        Text(
+                                            text = "Title: ${version.title}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
                                     Text(
                                         text = version.body,
                                         maxLines = 3,
@@ -3173,13 +3246,13 @@ private fun PromptCard(
             VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
         }
     }
-    var promptAdvancedHistory by remember { mutableStateOf(false) }
-    var promptBaseIndex by remember { mutableIntStateOf((numberedPromptVersions.size - 2).coerceAtLeast(0)) }
-    var promptCompareIndex by remember { mutableIntStateOf(numberedPromptVersions.lastIndex.coerceAtLeast(0)) }
 
-    LaunchedEffect(numberedPromptVersions.size) {
-        promptBaseIndex = (numberedPromptVersions.size - 2).coerceAtLeast(0)
-        promptCompareIndex = numberedPromptVersions.lastIndex.coerceAtLeast(0)
+    var promptAdvancedHistory by remember { mutableStateOf(false) }
+    var promptBaseIndex by remember(numberedPromptVersions) {
+        mutableIntStateOf((numberedPromptVersions.size - 2).coerceAtLeast(0))
+    }
+    var promptCompareIndex by remember(numberedPromptVersions) {
+        mutableIntStateOf(numberedPromptVersions.lastIndex.coerceAtLeast(0))
     }
 
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
@@ -3402,41 +3475,86 @@ private fun PromptCard(
                             val baseVersion = promptTimeline.getOrElse(promptBaseIndex) { promptTimeline.last() }
                             val compareVersion = promptTimeline.getOrElse(promptCompareIndex) { promptTimeline.last() }
 
-                            DiffBlock(
-                                title = "Title",
-                                before = baseVersion.title,
-                                after = compareVersion.title
-                            )
-                            DiffBlock(
-                                title = "Description",
-                                before = baseVersion.description.ifBlank { "(empty)" },
-                                after = compareVersion.description.ifBlank { "(empty)" }
-                            )
-                            DiffBlock(
-                                title = "Prompt Text",
-                                before = baseVersion.content,
-                                after = compareVersion.content
-                            )
-                            DiffBlock(
-                                title = "AI Model",
-                                before = "#${baseVersion.tag}",
-                                after = "#${compareVersion.tag}"
-                            )
-                            DiffBlock(
-                                title = "Temperature",
-                                before = baseVersion.temperature ?: "—",
-                                after = compareVersion.temperature ?: "—"
-                            )
-                            DiffBlock(
-                                title = "Context",
-                                before = baseVersion.context ?: "—",
-                                after = compareVersion.context ?: "—"
-                            )
-                            DiffBlock(
-                                title = "Memory Tokens",
-                                before = baseVersion.memoryTokens ?: "—",
-                                after = compareVersion.memoryTokens ?: "—"
-                            )
+                            val basePromptVersion = if (promptBaseIndex == promptTimeline.lastIndex) {
+                                prompt
+                            } else {
+                                null
+                            }
+
+                            val onlyVisibilityChanged = baseVersion.title == compareVersion.title &&
+                                    baseVersion.description == compareVersion.description &&
+                                    baseVersion.content == compareVersion.content &&
+                                    baseVersion.tag == compareVersion.tag &&
+                                    baseVersion.temperature == compareVersion.temperature &&
+                                    baseVersion.context == compareVersion.context &&
+                                    baseVersion.memoryTokens == compareVersion.memoryTokens
+
+                            if (onlyVisibilityChanged && promptBaseIndex != promptCompareIndex) {
+                                OutlinedCard(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "Only visibility changed",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = "The prompt content remained the same. Only the privacy setting was modified between these versions.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            } else {
+                                DiffBlock(
+                                    title = "Title",
+                                    before = baseVersion.title,
+                                    after = compareVersion.title
+                                )
+                                DiffBlock(
+                                    title = "Description",
+                                    before = baseVersion.description.ifBlank { "(empty)" },
+                                    after = compareVersion.description.ifBlank { "(empty)" }
+                                )
+                                DiffBlock(
+                                    title = "Prompt Text",
+                                    before = baseVersion.content,
+                                    after = compareVersion.content
+                                )
+                                DiffBlock(
+                                    title = "AI Model",
+                                    before = "#${baseVersion.tag}",
+                                    after = "#${compareVersion.tag}"
+                                )
+
+                                if (baseVersion.temperature != compareVersion.temperature) {
+                                    DiffBlock(
+                                        title = "Temperature",
+                                        before = baseVersion.temperature ?: "(not set)",
+                                        after = compareVersion.temperature ?: "(not set)"
+                                    )
+                                }
+
+                                if (baseVersion.context != compareVersion.context) {
+                                    DiffBlock(
+                                        title = "Context",
+                                        before = baseVersion.context ?: "(not set)",
+                                        after = compareVersion.context ?: "(not set)"
+                                    )
+                                }
+
+                                if (baseVersion.memoryTokens != compareVersion.memoryTokens) {
+                                    DiffBlock(
+                                        title = "Memory Tokens",
+                                        before = baseVersion.memoryTokens ?: "(not set)",
+                                        after = compareVersion.memoryTokens ?: "(not set)"
+                                    )
+                                }
+                            }
                         }
                     } else {
                         val numberedTimeline = promptTimeline.mapIndexed { index, version -> index + 1 to version }
@@ -3460,6 +3578,40 @@ private fun PromptCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+
+                                    if (number > 1) {
+                                        val prevVersion = numberedTimeline.firstOrNull { it.first == number - 1 }?.second
+                                        if (prevVersion != null) {
+                                            val changes = mutableListOf<String>()
+                                            if (version.title != prevVersion.title) changes.add("title")
+                                            if (version.description != prevVersion.description) changes.add("description")
+                                            if (version.content != prevVersion.content) changes.add("content")
+                                            if (version.tag != prevVersion.tag) changes.add("tag")
+                                            if (version.temperature != prevVersion.temperature) changes.add("temperature")
+                                            if (version.context != prevVersion.context) changes.add("context")
+                                            if (version.memoryTokens != prevVersion.memoryTokens) changes.add("memory")
+
+                                            if (changes.isNotEmpty()) {
+                                                Text(
+                                                    text = "Changed: ${changes.joinToString(", ")}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (version.title != prompt.title) {
+                                        Text(
+                                            text = "Title: ${version.title}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+
                                     if (version.description.isNotBlank()) {
                                         Text(
                                             text = version.description,
@@ -4080,7 +4232,17 @@ private fun buildDiffLines(before: String, after: String): List<DiffLine> {
 
 @Composable
 private fun DiffBlock(title: String, before: String, after: String) {
-    val diffLines = remember(before, after) { buildDiffLines(before, after) }
+    val diffLines = remember(before, after) {
+        val beforeLines = before.lines()
+        val afterLines = after.lines()
+
+        if (beforeLines.size == 1 && afterLines.size == 1) {
+            buildSimpleDiff(before, after)
+        } else {
+            buildDiffLines(before, after)
+        }
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
         Box(
@@ -4092,10 +4254,19 @@ private fun DiffBlock(title: String, before: String, after: String) {
         ) {
             Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 diffLines.forEach { line ->
-                    val background = when (line.type) {
-                        DiffType.ADDED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
-                        DiffType.REMOVED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
-                        DiffType.UNCHANGED -> Color.Transparent
+                    val (background, prefixColor) = when (line.type) {
+                        DiffType.ADDED -> Pair(
+                            Color(0xFFD4EDDA),
+                            Color(0xFF22863A)
+                        )
+                        DiffType.REMOVED -> Pair(
+                            Color(0xFFFCE8E8),
+                            Color(0xFFCB2431)
+                        )
+                        DiffType.UNCHANGED -> Pair(
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
                     }
                     val prefix = when (line.type) {
                         DiffType.ADDED -> "+"
@@ -4109,7 +4280,13 @@ private fun DiffBlock(title: String, before: String, after: String) {
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(prefix, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = prefix,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = prefixColor,
+                            modifier = Modifier.width(12.dp)
+                        )
                         Spacer(Modifier.size(6.dp))
                         Text(
                             text = line.content.ifBlank { " " },
@@ -4186,3 +4363,15 @@ private fun Prompt.toCurrentVersionSnapshot(): PromptVersion = PromptVersion(
     memoryTokens = memoryTokens,
     createdAt = updatedAt
 )
+
+private fun buildSimpleDiff(before: String, after: String): List<DiffLine> {
+    return when {
+        before == after -> listOf(DiffLine(DiffType.UNCHANGED, before))
+        before.isEmpty() -> listOf(DiffLine(DiffType.ADDED, after))
+        after.isEmpty() -> listOf(DiffLine(DiffType.REMOVED, before))
+        else -> listOf(
+            DiffLine(DiffType.REMOVED, before),
+            DiffLine(DiffType.ADDED, after)
+        )
+    }
+}

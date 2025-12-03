@@ -1,0 +1,86 @@
+--- AppScreen.kt.original
++++ AppScreen.kt.fixed
+@@ -1037,14 +1037,12 @@
+             VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
+         }
+     }
+-    var advancedHistory by remember { mutableStateOf(false) }
+-    var baseVersionIndex by remember { mutableIntStateOf((numberedPostVersions.size - 2).coerceAtLeast(0)) }
+-    var compareVersionIndex by remember { mutableIntStateOf(numberedPostVersions.lastIndex.coerceAtLeast(0)) }
+-
+-    LaunchedEffect(numberedPostVersions.size) {
+-        baseVersionIndex = (numberedPostVersions.size - 2).coerceAtLeast(0)
+-        compareVersionIndex = numberedPostVersions.lastIndex.coerceAtLeast(0)
++    var advancedHistory by remember { mutableStateOf(false) }
++    var baseVersionIndex by remember(numberedPostVersions) { 
++        mutableIntStateOf((numberedPostVersions.size - 2).coerceAtLeast(0)) 
+     }
++    var compareVersionIndex by remember(numberedPostVersions) { 
++        mutableIntStateOf(numberedPostVersions.lastIndex.coerceAtLeast(0)) 
++    }
+ 
+     BaseContentCard(modifier = Modifier.testTag("post_card")) {
+@@ -1797,14 +1795,12 @@
+             VersionOption(index, "Version ${index + 1} • ${version.createdAt.formatRelative()}")
+         }
+     }
+-    var promptAdvancedHistory by remember { mutableStateOf(false) }
+-    var promptBaseIndex by remember { mutableIntStateOf((numberedPromptVersions.size - 2).coerceAtLeast(0)) }
+-    var promptCompareIndex by remember { mutableIntStateOf(numberedPromptVersions.lastIndex.coerceAtLeast(0)) }
+-
+-    LaunchedEffect(numberedPromptVersions.size) {
+-        promptBaseIndex = (numberedPromptVersions.size - 2).coerceAtLeast(0)
+-        promptCompareIndex = numberedPromptVersions.lastIndex.coerceAtLeast(0)
++    var promptAdvancedHistory by remember { mutableStateOf(false) }
++    var promptBaseIndex by remember(numberedPromptVersions) { 
++        mutableIntStateOf((numberedPromptVersions.size - 2).coerceAtLeast(0)) 
+     }
++    var promptCompareIndex by remember(numberedPromptVersions) { 
++        mutableIntStateOf(numberedPromptVersions.lastIndex.coerceAtLeast(0)) 
++    }
+ 
+     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
+@@ -2396,25 +2392,38 @@
+             Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                 diffLines.forEach { line ->
+-                    val background = when (line.type) {
+-                        DiffType.ADDED -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)
+-                        DiffType.REMOVED -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+-                        DiffType.UNCHANGED -> Color.Transparent
++                    val (background, prefixColor) = when (line.type) {
++                        DiffType.ADDED -> Pair(
++                            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
++                            Color(0xFF0D7D0D) // Dark green
++                        )
++                        DiffType.REMOVED -> Pair(
++                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f),
++                            Color(0xFFCC0000) // Dark red
++                        )
++                        DiffType.UNCHANGED -> Pair(
++                            Color.Transparent,
++                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
++                        )
+                     }
+                     val prefix = when (line.type) {
+                         DiffType.ADDED -> "+"
+                         DiffType.REMOVED -> "-"
+                         DiffType.UNCHANGED -> " "
+                     }
+                     Row(
+                         modifier = Modifier
+                             .fillMaxWidth()
+                             .background(background)
+                             .padding(horizontal = 6.dp, vertical = 2.dp),
+                         verticalAlignment = Alignment.CenterVertically
+                     ) {
+-                        Text(prefix, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
++                        Text(
++                            text = prefix,
++                            fontFamily = FontFamily.Monospace,
++                            fontWeight = FontWeight.Bold,
++                            color = prefixColor,
++                            modifier = Modifier.width(12.dp)
++                        )
+                         Spacer(Modifier.size(6.dp))
+                         Text(
+                             text = line.content.ifBlank { " " },
