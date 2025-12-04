@@ -4,6 +4,114 @@ Project Title
 BestLLMTeam23 – USC LLM Sharing App
 CSCI 310 • Software Engineering • Team 23 (Jobless Dreamers)
 
+Improvements Since Project 2.4 (Sprint 2.5 Enhancements)
+
+During Sprint 2.5, our team implemented significant functionality upgrades, architectural improvements, and UX refinements beyond the capabilities delivered in Project 2.4. These additions were based on missing requirements identified by the customer (TA) as well as new competitive features requested during user-feedback discussions.
+
+The major improvements delivered in this sprint include:
+
+1. Enhanced State Management & Page Transition Stability
+
+We redesigned state handling across the app to eliminate data loss and provide a smoother, more professional user experience.
+
+Improvements:
+
+Preserved scroll position when switching between major tabs.
+
+Persisted search filters, sort preferences, and form inputs across navigation.
+
+Implemented ViewModel + SavedStateHandle architecture for consistent state restoration.
+
+Eliminated stale content caused by desynchronized Room database reads/writes.
+
+Reduced UI lag and jitter during screen transitions.
+
+Result: Navigation now feels stable, predictable, and polished, with significantly fewer user frustrations.
+
+2. Version History Tracking for Posts, Prompts, and Comments
+
+We added a complete content versioning system to match competitor platforms and improve content transparency.
+
+Improvements:
+
+Database schema now stores multiple versions of edited posts, prompts, and comments.
+
+UI entry points allow users to open version history from any edited item.
+
+Each version includes timestamps and sequential version labels.
+
+Added foundations for future diff-view functionality.
+
+Result: Users can review and trust the evolution of shared content, improving platform reliability and accountability.
+
+3. Bookmarks & Saved Content Library
+
+We introduced a new engagement feature allowing users to save meaningful content for later.
+
+Improvements:
+
+Added one-tap bookmarking for posts and prompts.
+
+Built a dedicated Saved Library screen.
+
+Added filters for content type, tags, and LLM categories.
+
+Synced bookmarks with Room persistence for app-restart consistency.
+
+Result: Users can easily revisit helpful posts and prompts, improving long-term engagement.
+
+4. Drafts & Anonymous Posting for Prompts
+
+Project 2.4 supported drafting/anonymous posting only for discussion posts; this sprint extended the same workflow to prompts.
+
+Improvements:
+
+Added a Drafts tab for prompts, mirroring the functionality for posts.
+
+Implemented anonymous prompt publishing options.
+
+Ensured draft prompts are private and invisible to community feeds.
+
+Preserved existing private-post behavior.
+
+Result: Users can develop prompt ideas more freely and publish anonymously when desired.
+
+5. Fuzzy Search for Post Full-Text Search
+
+We improved the discoverability of posts by adding a dynamic fuzzy-search algorithm.
+
+Improvements:
+
+Developed a DP-based fuzzy-matching algorithm to detect partial terms and near-matches.
+
+Supports substring detection of long technical terms (e.g., “ThisIsAVeryLongTechnicalTerm”).
+
+Added UX improvements including highlighting matched text in search results.
+
+Integrated tuning options to reduce noise and prevent inaccurate matches.
+
+Result: Search now feels flexible and intelligent, returning relevant results even with incomplete terms or typos.
+
+6. Additional UI, Testing, and Stability Enhancements
+
+Beyond feature additions, we strengthened internal architecture and reliability:
+
+Improvements:
+
+Added unit tests, instrumentation tests, and regression tests for new code paths.
+
+Improved UI responsiveness across multiple screens.
+
+Conducted performance profiling on long-body fuzzy searches.
+
+Reduced race conditions through improved coroutine and repository design.
+
+Result: The application is more robust, more testable, and closer to production-ready quality.
+
+
+
+Project 2.4 Description
+
 Overview
 
 BestLLMTeam23 is an Android application that allows USC students to:
