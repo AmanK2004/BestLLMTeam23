@@ -70,6 +70,7 @@ data class Post(
 data class Prompt(
     val id: Long,
     val author: UserSummary,
+    val isAnonymous: Boolean = false,
     val title: String,
     val description: String,
     val content: String,
@@ -81,6 +82,7 @@ data class Prompt(
     val updatedAt: Instant,
     val isPrivate: Boolean = false,
     val isBookmarked: Boolean = false,
+    val isPublished: Boolean = true,
     val isEdited: Boolean = false
 )
 
@@ -110,7 +112,7 @@ data class SearchState(
 
         val refreshedPrompts = if (promptTag.isNotBlank()) {
             prompts.filter {
-                !it.isPrivate && it.tag.equals(promptTag, ignoreCase = true)
+                !it.isPrivate && it.isPublished && it.tag.equals(promptTag, ignoreCase = true)
             }
         } else {
             emptyList()

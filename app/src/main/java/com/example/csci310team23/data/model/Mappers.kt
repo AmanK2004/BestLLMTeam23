@@ -63,6 +63,7 @@ fun CommentEntity.toDomain(
 fun PromptEntity.toDomain(author: UserSummary): Prompt = Prompt(
     id = id,
     author = author,
+    isAnonymous = isAnonymous,
     title = title,
     description = description,
     content = content,
@@ -74,6 +75,7 @@ fun PromptEntity.toDomain(author: UserSummary): Prompt = Prompt(
     updatedAt = updatedAt.toInstant(),
     isPrivate = isPrivate,
     isBookmarked = false,
+    isPublished = isPublished,
     isEdited = isEdited
 )
 

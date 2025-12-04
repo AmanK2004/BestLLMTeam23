@@ -25,7 +25,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
@@ -633,6 +636,7 @@ private fun MainScreen(
                 onDeletePost = viewModel::deletePost,
                 onUpdatePost = viewModel::updatePost,
                 onUpdatePrompt = viewModel::updatePrompt,
+                onPublishPrompt = viewModel::publishPrompt,
                 onDeletePrompt = viewModel::deletePrompt,
                 onCreateComment = viewModel::createComment,
                 onUpdateComment = viewModel::updateComment,
@@ -645,7 +649,7 @@ private fun MainScreen(
                 currentUser = currentUser,
                 allPrompts = uiState.prompts,
                 promptVersions = uiState.promptVersions,
-                onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+                onCreatePrompt = { title, description, content, tag, temperature, context, memoryTokens, isPrivate, isAnonymous, isDraft ->
                     viewModel.createPrompt(
                         title,
                         description,
@@ -654,10 +658,13 @@ private fun MainScreen(
                         temperature,
                         context,
                         memoryTokens,
-                        isPrivate
+                        isPrivate,
+                        isAnonymous,
+                        isDraft
                     )
                 },
                 onUpdatePrompt = viewModel::updatePrompt,
+                onPublishPrompt = viewModel::publishPrompt,
                 onDeletePrompt = viewModel::deletePrompt,
                 onTogglePromptBookmark = viewModel::togglePromptBookmark
             )
@@ -709,6 +716,7 @@ private fun FeedSection(
     var showCreatePost by rememberSaveable { mutableStateOf(false) }
     var showWatchDialog by remember { mutableStateOf(false) }
     val viewModel: AppViewModel = viewModel()
+    val feedListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     SwipeRefresh(
         state = rememberSwipeRefreshState(isRefreshing = isFeedRefreshing),
@@ -717,6 +725,7 @@ private fun FeedSection(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            state = feedListState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -1052,19 +1061,24 @@ private fun PromptSection(
     currentUser: UserProfile?,
     allPrompts: List<Prompt>,
     promptVersions: Map<Long, List<PromptVersion>>,
-    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean) -> Unit,
-    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean, Boolean, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean, Boolean) -> Unit,
+    onPublishPrompt: (Long) -> Unit,
     onDeletePrompt: (Long) -> Unit,
     onTogglePromptBookmark: (Long) -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var showCreatePrompt by rememberSaveable { mutableStateOf(false) }
+    val promptListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     val myPrompts = allPrompts.filter { it.author.id == currentUser?.id }
-    val publicPrompts = allPrompts.filter { !it.isPrivate }
+    val draftPrompts = myPrompts.filter { !it.isPublished }
+    val publishedMyPrompts = myPrompts.filter { it.isPublished }
+    val publicPrompts = allPrompts.filter { !it.isPrivate && it.isPublished }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
+        state = promptListState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -1085,9 +1099,15 @@ private fun PromptSection(
                         text = { Text("My Prompts") }
                     )
                     Tab(
-                        modifier = Modifier.testTag("prompts_tab_community"),
+                        modifier = Modifier.testTag("prompts_tab_drafts"),
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
+                        text = { Text("Drafts") }
+                    )
+                    Tab(
+                        modifier = Modifier.testTag("prompts_tab_community"),
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
                         text = { Text("Community") }
                     )
                 }
@@ -1134,7 +1154,7 @@ private fun PromptSection(
                     ) {
                         if (currentUser != null) {
                             CreatePromptCard(
-                                onCreatePrompt = { title, description, content, tag, temp, ctx, mem, isPrivate ->
+                                onCreatePrompt = { title, description, content, tag, temp, ctx, mem, isPrivate, isAnonymous, isDraft ->
                                     onCreatePrompt(
                                         title,
                                         description,
@@ -1143,7 +1163,9 @@ private fun PromptSection(
                                         temp,
                                         ctx,
                                         mem,
-                                        isPrivate
+                                        isPrivate,
+                                        isAnonymous,
+                                        isDraft
                                     )
                                     showCreatePrompt = false
                                 }
@@ -1152,17 +1174,18 @@ private fun PromptSection(
                     }
                 }
 
-                items(myPrompts, key = { it.id }) { prompt ->
+                items(publishedMyPrompts, key = { it.id }) { prompt ->
                     PromptCard(
                         prompt = prompt,
                         canEdit = true,
                         onUpdatePrompt = onUpdatePrompt,
+                        onPublishPrompt = onPublishPrompt,
                         onDeletePrompt = onDeletePrompt,
                         onToggleBookmark = onTogglePromptBookmark,
                         versions = promptVersions[prompt.id].orEmpty()
                     )
                 }
-                if (myPrompts.isEmpty()) {
+                if (publishedMyPrompts.isEmpty()) {
                     item {
                         Text(
                             text = "You haven't created any prompts yet. Start building your library!",
@@ -1174,11 +1197,35 @@ private fun PromptSection(
             }
 
             1 -> {
+                items(draftPrompts, key = { it.id }) { prompt ->
+                    PromptCard(
+                        prompt = prompt,
+                        canEdit = true,
+                        onUpdatePrompt = onUpdatePrompt,
+                        onPublishPrompt = onPublishPrompt,
+                        onDeletePrompt = onDeletePrompt,
+                        onToggleBookmark = onTogglePromptBookmark,
+                        versions = promptVersions[prompt.id].orEmpty()
+                    )
+                }
+                if (draftPrompts.isEmpty()) {
+                    item {
+                        Text(
+                            text = "No draft prompts yet. Save a prompt as a draft to review it later.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+                }
+            }
+
+            2 -> {
                 items(publicPrompts, key = { it.id }) { prompt ->
                     PromptCard(
                         prompt = prompt,
                         canEdit = currentUser?.id == prompt.author.id,
                         onUpdatePrompt = onUpdatePrompt,
+                        onPublishPrompt = onPublishPrompt,
                         onDeletePrompt = onDeletePrompt,
                         onToggleBookmark = onTogglePromptBookmark,
                         versions = promptVersions[prompt.id].orEmpty()
@@ -1212,7 +1259,8 @@ private fun DiscoverSection(
     onPublishDraft: (Long) -> Unit,
     onDeletePost: (Long) -> Unit,
     onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
-    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean, Boolean) -> Unit,
+    onPublishPrompt: (Long) -> Unit,
     onDeletePrompt: (Long) -> Unit,
     onCreateComment: (Long, String?, String) -> Unit,
     onUpdateComment: (Long, String?, String) -> Unit,
@@ -1275,6 +1323,7 @@ private fun DiscoverSection(
                 onDeletePost = onDeletePost,
                 onUpdatePost = onUpdatePost,
                 onUpdatePrompt = onUpdatePrompt,
+                onPublishPrompt = onPublishPrompt,
                 onDeletePrompt = onDeletePrompt,
                 onCreateComment = onCreateComment,
                 onUpdateComment = onUpdateComment,
@@ -1298,7 +1347,8 @@ private fun BookmarkSection(
     onPublishDraft: (Long) -> Unit,
     onDeletePost: (Long) -> Unit,
     onUpdatePost: (Long, String, String, String, Boolean) -> Unit,
-    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean, Boolean) -> Unit,
+    onPublishPrompt: (Long) -> Unit,
     onDeletePrompt: (Long) -> Unit,
     onCreateComment: (Long, String?, String) -> Unit,
     onUpdateComment: (Long, String?, String) -> Unit,
@@ -1309,9 +1359,11 @@ private fun BookmarkSection(
     var tagExpanded by remember { mutableStateOf(false) }
     var contentTypeFilter by rememberSaveable { mutableStateOf("All") }
     var contentTypeExpanded by remember { mutableStateOf(false) }
+    val bookmarkListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
+        state = bookmarkListState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -1428,7 +1480,7 @@ private fun BookmarkSection(
                 )
             }
 
-            items(filteredPosts, key = { it.id }) { post ->
+            items(filteredPosts, key = { "post_${it.id}" }) { post ->
                 PostCard(
                     post = post,
                     currentUser = currentUser,
@@ -1457,11 +1509,12 @@ private fun BookmarkSection(
                 )
             }
 
-            items(filteredPrompts, key = { it.id }) { prompt ->
+            items(filteredPrompts, key = { "prompt_${it.id}" }) { prompt ->
                 PromptCard(
                     prompt = prompt,
                     canEdit = currentUser?.id == prompt.author.id,
                     onUpdatePrompt = onUpdatePrompt,
+                    onPublishPrompt = onPublishPrompt,
                     onDeletePrompt = onDeletePrompt,
                     onToggleBookmark = onTogglePromptBookmark,
                     versions = promptVersions[prompt.id].orEmpty()
@@ -1497,13 +1550,17 @@ private fun SearchSection(
     onSearchPrompts: (String) -> Unit,
     onSearchUsers: (String) -> Unit
 ) {
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var selectedType by rememberSaveable { mutableStateOf(PostSearchType.TAG) }
-    var keyword by rememberSaveable { mutableStateOf("") }
+    val viewModel: AppViewModel = viewModel()
+
+    var selectedTab by remember { mutableIntStateOf(viewModel.getSearchTab()) }
+    var selectedTypeOrdinal by remember { mutableIntStateOf(viewModel.getPostSearchType()) }
+    val selectedType = PostSearchType.values()[selectedTypeOrdinal]
+    var keyword by remember { mutableStateOf(viewModel.getPostSearchKeyword()) }
+    var promptTag by remember { mutableStateOf(viewModel.getPromptSearchTag()) }
+    var userQuery by remember { mutableStateOf(viewModel.getUserSearchQuery()) }
+
     var tagExpanded by remember { mutableStateOf(false) }
-    var promptTag by rememberSaveable { mutableStateOf("") }
     var promptTagExpanded by remember { mutableStateOf(false) }
-    var userQuery by rememberSaveable { mutableStateOf("") }
     var postSearched by rememberSaveable { mutableStateOf(false) }
     var promptSearched by rememberSaveable { mutableStateOf(false) }
     var userSearched by rememberSaveable { mutableStateOf(false) }
@@ -1527,19 +1584,28 @@ private fun SearchSection(
                     Tab(
                         modifier = Modifier.testTag("search_tab_posts"),
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = {
+                            selectedTab = 0
+                            viewModel.setSearchTab(0)
+                        },
                         text = { Text("Posts") }
                     )
                     Tab(
                         modifier = Modifier.testTag("search_tab_prompts"),
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = {
+                            selectedTab = 1
+                            viewModel.setSearchTab(1)
+                        },
                         text = { Text("Prompts") }
                     )
                     Tab(
                         modifier = Modifier.testTag("search_tab_users"),
                         selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
+                        onClick = {
+                            selectedTab = 2
+                            viewModel.setSearchTab(2)
+                        },
                         text = { Text("Users") }
                     )
                 }
@@ -1557,7 +1623,10 @@ private fun SearchSection(
                             PostSearchType.values().forEach { type ->
                                 FilterChip(
                                     selected = selectedType == type,
-                                    onClick = { selectedType = type },
+                                    onClick = {
+                                        selectedTypeOrdinal = type.ordinal
+                                        viewModel.setPostSearchType(type.ordinal)
+                                    },
                                     label = { Text(type.name.replace("_", " ")) }
                                 )
                             }
@@ -1570,7 +1639,10 @@ private fun SearchSection(
                             ) {
                                 OutlinedTextField(
                                     value = keyword,
-                                    onValueChange = { keyword = it },
+                                    onValueChange = {
+                                        keyword = it
+                                        viewModel.setPostSearchKeyword(it)
+                                    },
                                     label = { Text("AI Model") },
                                     trailingIcon = {
                                         ExposedDropdownMenuDefaults.TrailingIcon(
@@ -1592,6 +1664,7 @@ private fun SearchSection(
                                             text = { Text(agent) },
                                             onClick = {
                                                 keyword = agent
+                                                viewModel.setPostSearchKeyword(agent)
                                                 tagExpanded = false
                                             }
                                         )
@@ -1601,7 +1674,10 @@ private fun SearchSection(
                         } else {
                             OutlinedTextField(
                                 value = keyword,
-                                onValueChange = { keyword = it },
+                                onValueChange = {
+                                    keyword = it
+                                    viewModel.setPostSearchKeyword(it)
+                                },
                                 label = { Text("Search keyword") },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1650,7 +1726,10 @@ private fun SearchSection(
                         ) {
                             OutlinedTextField(
                                 value = promptTag,
-                                onValueChange = { promptTag = it },
+                                onValueChange = {
+                                    promptTag = it
+                                    viewModel.setPromptSearchTag(it)
+                                },
                                 label = { Text("AI Model") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = promptTagExpanded) },
                                 modifier = Modifier
@@ -1668,6 +1747,7 @@ private fun SearchSection(
                                         text = { Text(agent) },
                                         onClick = {
                                             promptTag = agent
+                                            viewModel.setPromptSearchTag(agent)
                                             promptTagExpanded = false
                                         }
                                     )
@@ -1714,7 +1794,10 @@ private fun SearchSection(
                         )
                         OutlinedTextField(
                             value = userQuery,
-                            onValueChange = { userQuery = it },
+                            onValueChange = {
+                                userQuery = it
+                                viewModel.setUserSearchQuery(it)
+                            },
                             label = { Text("Name or Email") },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2298,15 +2381,16 @@ private fun PostCard(
     }
 
     BaseContentCard(modifier = Modifier.testTag("post_card")) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Text(
                         text = post.title,
@@ -2343,8 +2427,83 @@ private fun PostCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.size(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = { onToggleBookmark(post.id) },
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("post_bookmark_button")
+                    ) {
+                        Icon(
+                            if (post.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = "Bookmark post"
+                        )
+                    }
+                    if (isOwnPost) {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("post_menu_button")
+                        ) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "Options",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = {
+                                    editPostTitle = post.title
+                                    editPostTag = post.tag
+                                    editPostBody = post.body
+                                    editPostIsAnonymous = post.isAnonymous
+                                    showEditPost = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                            )
+                            if (!post.isPublished) {
+                                DropdownMenuItem(
+                                    text = { Text("Publish") },
+                                    onClick = {
+                                        onPublishDraft(post.id)
+                                        showMenu = false
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Filled.Publish,
+                                            contentDescription = null
+                                        )
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = {
+                                    showDeleteDialog = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                            )
+                        }
+                    }
+                }
+            }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -2361,81 +2520,11 @@ private fun PostCard(
                         )
                     }
                 }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
                 Text(
                     text = "#${post.tag}",
-                    style = MaterialTheme.typography.labelLarge
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.widthIn(min = 60.dp)
                 )
-                IconButton(
-                    onClick = { onToggleBookmark(post.id) },
-                    modifier = Modifier
-                        .size(24.dp)
-                        .testTag("post_bookmark_button")
-                ) {
-                    Icon(
-                        if (post.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = "Bookmark post"
-                    )
-                }
-                if (isOwnPost) {
-                    IconButton(
-                        onClick = { showMenu = true },
-                        modifier = Modifier
-                            .size(24.dp)
-                            .testTag("post_menu_button")
-                    ) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = "Options",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Edit") },
-                            onClick = {
-                                editPostTitle = post.title
-                                editPostTag = post.tag
-                                editPostBody = post.body
-                                editPostIsAnonymous = post.isAnonymous
-                                showEditPost = true
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                        )
-                        if (!post.isPublished) {
-                            DropdownMenuItem(
-                                text = { Text("Publish") },
-                                onClick = {
-                                    onPublishDraft(post.id)
-                                    showMenu = false
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Filled.Publish,
-                                        contentDescription = null
-                                    )
-                                }
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            onClick = {
-                                showDeleteDialog = true
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                        )
-                    }
-                }
             }
         }
 
@@ -2563,7 +2652,12 @@ private fun PostCard(
             },
             title = { Text("Post Version History") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = !advancedHistory,
@@ -3041,7 +3135,7 @@ private fun VoteRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreatePromptCard(
-    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean) -> Unit
+    onCreatePrompt: (String, String, String, String, String?, String?, String?, Boolean, Boolean, Boolean) -> Unit
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
@@ -3051,6 +3145,8 @@ private fun CreatePromptCard(
     var context by rememberSaveable { mutableStateOf("") }
     var memoryTokens by rememberSaveable { mutableStateOf("") }
     var isPrivate by rememberSaveable { mutableStateOf(false) }
+    var isAnonymous by rememberSaveable { mutableStateOf(false) }
+    var isDraft by rememberSaveable { mutableStateOf(false) }
     var showOptional by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tagExpanded by remember { mutableStateOf(false) }
@@ -3185,6 +3281,30 @@ private fun CreatePromptCard(
                 Text("Save as Private Prompt (only you can see)")
             }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isAnonymous,
+                    onCheckedChange = { isAnonymous = it },
+                    modifier = Modifier.testTag("create_prompt_anonymous_checkbox")
+                )
+                Text("Publish anonymously")
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Checkbox(
+                    checked = isDraft,
+                    onCheckedChange = { isDraft = it },
+                    modifier = Modifier.testTag("create_prompt_draft_checkbox")
+                )
+                Text("Save as draft (not visible to others)")
+            }
+
             error?.let {
                 Text(
                     text = it,
@@ -3209,7 +3329,9 @@ private fun CreatePromptCard(
                                 temperature.takeIf { it.isNotBlank() }?.trim(),
                                 context.takeIf { it.isNotBlank() }?.trim(),
                                 memoryTokens.takeIf { it.isNotBlank() }?.trim(),
-                                isPrivate
+                                isPrivate,
+                                isAnonymous,
+                                isDraft
                             )
                         }
                     }
@@ -3218,7 +3340,13 @@ private fun CreatePromptCard(
                     .fillMaxWidth()
                     .testTag("create_prompt_submit_button")
             ) {
-                Text(if (isPrivate) "Save Private Prompt" else "Share Prompt")
+                Text(
+                    when {
+                        isDraft -> "Save Draft"
+                        isPrivate -> "Save Private Prompt"
+                        else -> "Share Prompt"
+                    }
+                )
             }
         }
     }
@@ -3228,7 +3356,8 @@ private fun CreatePromptCard(
 private fun PromptCard(
     prompt: Prompt,
     canEdit: Boolean,
-    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onUpdatePrompt: (Long, String, String, String, String, String?, String?, String?, Boolean, Boolean) -> Unit,
+    onPublishPrompt: (Long) -> Unit,
     onDeletePrompt: (Long) -> Unit,
     onToggleBookmark: (Long) -> Unit,
     versions: List<PromptVersion> = emptyList()
@@ -3258,24 +3387,53 @@ private fun PromptCard(
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
             !prompt.context.isNullOrBlank() ||
             !prompt.memoryTokens.isNullOrBlank()
-
+    val displayName = if (prompt.isAnonymous && !canEdit) "Anon" else prompt.author.name
 
     BaseContentCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Text(
                         text = prompt.title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                    if (!prompt.isPublished) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.testTag("prompt_draft_badge")
+                        ) {
+                            Text(
+                                text = "DRAFT",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                    if (prompt.isAnonymous) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.testTag("prompt_anonymous_badge")
+                        ) {
+                            Text(
+                                text = "ANON",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                     if (prompt.isPrivate) {
                         Surface(
                             color = MaterialTheme.colorScheme.secondaryContainer,
@@ -3292,14 +3450,81 @@ private fun PromptCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.size(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(
+                        onClick = { onToggleBookmark(prompt.id) },
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("prompt_bookmark_button")
+                    ) {
+                        Icon(
+                            if (prompt.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = "Bookmark prompt"
+                        )
+                    }
+                    if (canEdit) {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier
+                                .size(24.dp)
+                                .testTag("prompt_menu_button")
+                        ) {
+                            Icon(
+                                Icons.Filled.MoreVert,
+                                contentDescription = "Options",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            if (!prompt.isPublished) {
+                                DropdownMenuItem(
+                                    text = { Text("Publish") },
+                                    onClick = {
+                                        onPublishPrompt(prompt.id)
+                                        showMenu = false
+                                    },
+                                    leadingIcon = { Icon(Icons.Filled.Publish, contentDescription = null) },
+                                    modifier = Modifier.testTag("publish_prompt_menu_item")
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = {
+                                    showEdit = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete") },
+                                onClick = {
+                                    showDeleteDialog = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
+                            )
+                        }
+                    }
+                }
+            }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
+                        text = "$displayName • ${prompt.createdAt.formatRelative()}",
                         style = MaterialTheme.typography.bodySmall
                     )
                     if (prompt.isEdited) {
@@ -3310,61 +3535,11 @@ private fun PromptCard(
                         )
                     }
                 }
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
                 Text(
                     text = "#${prompt.tag}",
-                    style = MaterialTheme.typography.labelLarge
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.widthIn(min = 60.dp)
                 )
-                IconButton(
-                    onClick = { onToggleBookmark(prompt.id) },
-                    modifier = Modifier
-                        .size(24.dp)
-                        .testTag("prompt_bookmark_button")
-                ) {
-                    Icon(
-                        if (prompt.isBookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = "Bookmark prompt"
-                    )
-                }
-                if (canEdit) {
-                    IconButton(
-                        onClick = { showMenu = true },
-                        modifier = Modifier
-                            .size(24.dp)
-                            .testTag("prompt_menu_button")
-                    ) {
-                        Icon(
-                            Icons.Filled.MoreVert,
-                            contentDescription = "Options",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Edit") },
-                            onClick = {
-                                showEdit = true
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            onClick = {
-                                showDeleteDialog = true
-                                showMenu = false
-                            },
-                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null) }
-                        )
-                    }
-                }
             }
         }
 
@@ -3434,7 +3609,12 @@ private fun PromptCard(
             confirmButton = { TextButton(onClick = { showHistory = false }) { Text("Close") } },
             title = { Text("Prompt Version History") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = !promptAdvancedHistory,
@@ -3475,12 +3655,6 @@ private fun PromptCard(
                             val baseVersion = promptTimeline.getOrElse(promptBaseIndex) { promptTimeline.last() }
                             val compareVersion = promptTimeline.getOrElse(promptCompareIndex) { promptTimeline.last() }
 
-                            val basePromptVersion = if (promptBaseIndex == promptTimeline.lastIndex) {
-                                prompt
-                            } else {
-                                null
-                            }
-
                             val onlyVisibilityChanged = baseVersion.title == compareVersion.title &&
                                     baseVersion.description == compareVersion.description &&
                                     baseVersion.content == compareVersion.content &&
@@ -3490,9 +3664,7 @@ private fun PromptCard(
                                     baseVersion.memoryTokens == compareVersion.memoryTokens
 
                             if (onlyVisibilityChanged && promptBaseIndex != promptCompareIndex) {
-                                OutlinedCard(
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
+                                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                                     Column(
                                         modifier = Modifier.padding(16.dp),
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -3559,9 +3731,7 @@ private fun PromptCard(
                     } else {
                         val numberedTimeline = promptTimeline.mapIndexed { index, version -> index + 1 to version }
                         numberedTimeline.reversed().forEach { (number, version) ->
-                            OutlinedCard(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -3638,7 +3808,7 @@ private fun PromptCard(
     if (showEdit) {
         EditPromptDialog(
             prompt = prompt,
-            onSave = { title, description, content, tag, temperature, context, memoryTokens, isPrivate ->
+            onSave = { title, description, content, tag, temperature, context, memoryTokens, isPrivate, isAnonymous, publishNow ->
                 onUpdatePrompt(
                     prompt.id,
                     title,
@@ -3648,8 +3818,12 @@ private fun PromptCard(
                     temperature,
                     context,
                     memoryTokens,
-                    isPrivate
+                    isPrivate,
+                    isAnonymous
                 )
+                if (publishNow && !prompt.isPublished) {
+                    onPublishPrompt(prompt.id)
+                }
                 showEdit = false
             },
             onDismiss = { showEdit = false }
@@ -3683,7 +3857,7 @@ private fun PromptCard(
 @Composable
 private fun EditPromptDialog(
     prompt: Prompt,
-    onSave: (String, String, String, String, String?, String?, String?, Boolean) -> Unit,
+    onSave: (String, String, String, String, String?, String?, String?, Boolean, Boolean, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var title by remember { mutableStateOf(prompt.title) }
@@ -3694,6 +3868,9 @@ private fun EditPromptDialog(
     var context by remember { mutableStateOf(prompt.context ?: "") }
     var memoryTokens by remember { mutableStateOf(prompt.memoryTokens ?: "") }
     var isPrivate by remember { mutableStateOf(prompt.isPrivate) }
+    var isAnonymous by remember { mutableStateOf(prompt.isAnonymous) }
+    val alreadyPublished = prompt.isPublished
+    var publishNow by remember { mutableStateOf(!prompt.isPublished) }
     var showOptional by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tagExpanded by remember { mutableStateOf(false) }
@@ -3717,7 +3894,9 @@ private fun EditPromptDialog(
                                 temperature.takeIf { it.isNotBlank() }?.trim(),
                                 context.takeIf { it.isNotBlank() }?.trim(),
                                 memoryTokens.takeIf { it.isNotBlank() }?.trim(),
-                                isPrivate
+                                isPrivate,
+                                isAnonymous,
+                                publishNow && !alreadyPublished
                             )
                         }
                     }
@@ -3849,7 +4028,37 @@ private fun EditPromptDialog(
                             onCheckedChange = { isPrivate = it },
                             modifier = Modifier.testTag("edit_prompt_private_checkbox")
                         )
-                        Text("Save as Private Draft")
+                        Text("Save as Private Prompt")
+                    }
+                }
+
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = isAnonymous,
+                            onCheckedChange = { isAnonymous = it },
+                            modifier = Modifier.testTag("edit_prompt_anonymous_checkbox")
+                        )
+                        Text("Keep author anonymous")
+                    }
+                }
+
+                if (!alreadyPublished) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = publishNow,
+                                onCheckedChange = { publishNow = it },
+                                modifier = Modifier.testTag("edit_prompt_publish_checkbox")
+                            )
+                            Text("Publish now (cannot revert to draft)")
+                        }
                     }
                 }
 
@@ -3876,6 +4085,7 @@ private fun PromptSearchCard(
     val hasOptionalFields = !prompt.temperature.isNullOrBlank() ||
             !prompt.context.isNullOrBlank() ||
             !prompt.memoryTokens.isNullOrBlank()
+    val displayName = if (prompt.isAnonymous && !isOwnPrompt) "Anon" else prompt.author.name
 
     BaseContentCard {
         Row(
@@ -3911,7 +4121,7 @@ private fun PromptSearchCard(
                 Spacer(modifier = Modifier.size(4.dp))
 
                 Text(
-                    text = "${prompt.author.name} • ${prompt.createdAt.formatRelative()}",
+                    text = "$displayName • ${prompt.createdAt.formatRelative()}",
                     style = MaterialTheme.typography.bodySmall
                 )
             }

@@ -455,7 +455,9 @@ class AppViewModel(
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean = false
+        isPrivate: Boolean = false,
+        isAnonymous: Boolean = false,
+        isDraft: Boolean = false
     ) {
         val userId = currentUserId.value ?: return
         viewModelScope.launch {
@@ -469,10 +471,15 @@ class AppViewModel(
                     temperature,
                     context,
                     memoryTokens,
-                    isPrivate
+                    isPrivate,
+                    isAnonymous,
+                    isPublished = !isDraft
                 )
-                val message =
-                    if (isPrivate) "Private prompt saved" else "Prompt shared with community"
+                val message = when {
+                    isDraft -> "Prompt saved as draft"
+                    isPrivate -> "Private prompt saved"
+                    else -> "Prompt shared with community"
+                }
                 _uiState.update { it.copy(infoMessage = message) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to share prompt") }
@@ -489,7 +496,8 @@ class AppViewModel(
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean
+        isPrivate: Boolean,
+        isAnonymous: Boolean
     ) {
         viewModelScope.launch {
             try {
@@ -502,11 +510,23 @@ class AppViewModel(
                     temperature,
                     context,
                     memoryTokens,
-                    isPrivate
+                    isPrivate,
+                    isAnonymous
                 )
                 _uiState.update { it.copy(infoMessage = "Prompt updated") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.message ?: "Unable to update prompt") }
+            }
+        }
+    }
+
+    fun publishPrompt(promptId: Long) {
+        viewModelScope.launch {
+            try {
+                repository.publishPromptDraft(promptId)
+                _uiState.update { it.copy(infoMessage = "Prompt published") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.message ?: "Unable to publish prompt") }
             }
         }
     }
@@ -811,7 +831,13 @@ class AppViewModel(
         }
         return snapshot.prompts.sortedByDescending { it.createdAt }
             .mapNotNull { prompt ->
-                if (prompt.isPrivate && prompt.authorId != currentUserId) {
+                val isDraft = !prompt.isPublished
+                val isOwnPrompt = prompt.authorId == currentUserId
+                if (prompt.isPrivate && !isOwnPrompt) {
+                    return@mapNotNull null
+                }
+
+                if (isDraft && !isOwnPrompt) {
                     return@mapNotNull null
                 }
 
@@ -820,6 +846,20 @@ class AppViewModel(
                 prompt.toDomain(author, isBookmarked)
             }
     }
+
+    fun setPostSearchType(typeOrdinal: Int) = preferencesManager.setPostSearchType(typeOrdinal)
+    fun getPostSearchType(): Int = preferencesManager.getPostSearchType()
+    fun setPostSearchKeyword(keyword: String) = preferencesManager.setPostSearchKeyword(keyword)
+    fun getPostSearchKeyword(): String = preferencesManager.getPostSearchKeyword()
+
+    fun setPromptSearchTag(tag: String) = preferencesManager.setPromptSearchTag(tag)
+    fun getPromptSearchTag(): String = preferencesManager.getPromptSearchTag()
+
+    fun setUserSearchQuery(query: String) = preferencesManager.setUserSearchQuery(query)
+    fun getUserSearchQuery(): String = preferencesManager.getUserSearchQuery()
+
+    fun setSearchTab(tab: Int) = preferencesManager.setSearchTab(tab)
+    fun getSearchTab(): Int = preferencesManager.getSearchTab()
 
     private inline fun <T> List<T>.toVoteSummary(crossinline selector: (T) -> Int): VoteSummary =
         VoteSummary(
@@ -844,3 +884,4 @@ class AppViewModel(
             }
     }
 }
+

@@ -138,7 +138,9 @@ interface AppRepository {
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean = false
+        isPrivate: Boolean = false,
+        isAnonymous: Boolean = false,
+        isPublished: Boolean = true
     ): Long
 
     suspend fun updatePrompt(
@@ -150,10 +152,13 @@ interface AppRepository {
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean = false
+        isPrivate: Boolean = false,
+        isAnonymous: Boolean = false
     )
 
     suspend fun deletePrompt(promptId: Long)
+
+    suspend fun publishPromptDraft(promptId: Long)
 
     suspend fun togglePostBookmark(userId: Long, postId: Long): Boolean
     suspend fun togglePromptBookmark(userId: Long, promptId: Long): Boolean
@@ -553,7 +558,9 @@ class RoomAppRepository(
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean
+        isPrivate: Boolean,
+        isAnonymous: Boolean,
+        isPublished: Boolean
     ): Long {
         if (title.isBlank() || content.isBlank() || tag.isBlank()) {
             throw IllegalArgumentException("Title, content, and AI model are required")
@@ -571,7 +578,9 @@ class RoomAppRepository(
             memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
             createdAt = now,
             updatedAt = now,
-            isPrivate = isPrivate
+            isPrivate = isPrivate,
+            isAnonymous = isAnonymous,
+            isPublished = isPublished
         )
         return promptDao.insert(entity)
     }
@@ -585,7 +594,8 @@ class RoomAppRepository(
         temperature: String?,
         context: String?,
         memoryTokens: String?,
-        isPrivate: Boolean
+        isPrivate: Boolean,
+        isAnonymous: Boolean
     ) {
         val existing = promptDao.getById(promptId)
             ?: throw IllegalArgumentException("Prompt not found")
@@ -619,7 +629,22 @@ class RoomAppRepository(
             memoryTokens = memoryTokens?.trim()?.takeIf { it.isNotBlank() },
             updatedAt = now,
             isPrivate = isPrivate,
+            isAnonymous = isAnonymous,
             isEdited = true
+        )
+        promptDao.update(updated)
+    }
+
+    override suspend fun publishPromptDraft(promptId: Long) {
+        val existing = promptDao.getById(promptId)
+            ?: throw IllegalArgumentException("Prompt not found")
+
+        if (existing.isPublished) return
+
+        val updated = existing.copy(
+            isPublished = true,
+            updatedAt = System.currentTimeMillis(),
+            isEdited = existing.isEdited || existing.createdAt != existing.updatedAt
         )
         promptDao.update(updated)
     }

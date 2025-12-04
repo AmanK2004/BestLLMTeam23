@@ -21,6 +21,46 @@ class PreferencesManager(context: Context) {
         return prefs.getBoolean("${KEY_SHOW_COMMENT_TITLES}_$userId", true) // Default to true
     }
 
+    fun setPostSearchType(typeOrdinal: Int) {
+        prefs.edit().putInt("post_search_type", typeOrdinal).apply()
+    }
+
+    fun getPostSearchType(): Int {
+        return prefs.getInt("post_search_type", 0)
+    }
+
+    fun setPostSearchKeyword(keyword: String) {
+        prefs.edit().putString("post_search_keyword", keyword).apply()
+    }
+
+    fun getPostSearchKeyword(): String {
+        return prefs.getString("post_search_keyword", "") ?: ""
+    }
+
+    fun setPromptSearchTag(tag: String) {
+        prefs.edit().putString("prompt_search_tag", tag).apply()
+    }
+
+    fun getPromptSearchTag(): String {
+        return prefs.getString("prompt_search_tag", "") ?: ""
+    }
+
+    fun setUserSearchQuery(query: String) {
+        prefs.edit().putString("user_search_query", query).apply()
+    }
+
+    fun getUserSearchQuery(): String {
+        return prefs.getString("user_search_query", "") ?: ""
+    }
+
+    fun setSearchTab(tab: Int) {
+        prefs.edit().putInt("search_tab", tab).apply()
+    }
+
+    fun getSearchTab(): Int {
+        return prefs.getInt("search_tab", 0)
+    }
+
     companion object {
         private const val KEY_HAS_SEEN_LANDING = "has_seen_landing"
         private const val KEY_SHOW_COMMENT_TITLES = "show_comment_titles"

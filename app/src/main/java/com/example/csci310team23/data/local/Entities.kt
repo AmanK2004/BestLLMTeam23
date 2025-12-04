@@ -105,6 +105,8 @@ data class PromptEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val isPrivate: Boolean = false,
+    val isAnonymous: Boolean = false,
+    val isPublished: Boolean = true,
     val isEdited: Boolean = false
 )
 
