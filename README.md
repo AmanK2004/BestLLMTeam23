@@ -1,5 +1,4 @@
 README.md — BestLLMTeam23
-Project Title
 
 BestLLMTeam23 – USC LLM Sharing App
 CSCI 310 • Software Engineering • Team 23 (Jobless Dreamers)
@@ -107,6 +106,8 @@ Conducted performance profiling on long-body fuzzy searches.
 Reduced race conditions through improved coroutine and repository design.
 
 Result: The application is more robust, more testable, and closer to production-ready quality.
+
+
 
 
 
